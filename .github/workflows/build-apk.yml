@@ -7,20 +7,17 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
-env:
-  GRADLE_VERSION: "8.4"
-
 jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
+      # 1. Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Set up Java 17
+      # 2. Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -28,24 +25,32 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # 3. Tạo Gradle Wrapper nếu thiếu gradle-wrapper.jar
+      # 3. Tạo gradle-wrapper.jar nếu thiếu
+      #    (file binary ~60KB, không thể commit bằng text editor)
       - name: Setup Gradle Wrapper
         run: |
+          GRADLE_VERSION=8.6
+
+          # Chỉ download nếu thiếu file jar
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "gradle-wrapper.jar không có, đang tạo..."
+            echo "Downloading Gradle $GRADLE_VERSION to generate wrapper jar..."
             wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
                  -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/
+            echo "Generating wrapper..."
             /tmp/gradle-${GRADLE_VERSION}/bin/gradle wrapper \
               --gradle-version=${GRADLE_VERSION} \
-              --distribution-type=bin
-            echo "✅ Wrapper đã tạo xong"
+              --distribution-type=bin \
+              --project-dir .
+            echo "gradle-wrapper.jar size: $(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes"
           else
-            echo "✅ gradle-wrapper.jar có sẵn"
+            echo "gradle-wrapper.jar already exists ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
           fi
-          chmod +x gradlew
 
-      # 4. Cache Gradle
+          chmod +x gradlew
+          ./gradlew --version
+
+      # 4. Cache
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -55,7 +60,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      # 5. Build Debug APK
+      # 5. Build Debug
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
@@ -66,14 +71,14 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
-      # 6. Build Release APK
+      # 6. Build Release
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      # 7. Ký APK — dùng env để check secrets (secrets không dùng được trong if trực tiếp)
+      # 7. Ký APK nếu có secrets
       - name: Sign Release APK
         id: sign_apk
-        if: env.HAS_SIGNING_KEY == 'true'
+        if: env.HAS_KEY == 'true'
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: app/build/outputs/apk/release
@@ -82,32 +87,32 @@ jobs:
           keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
         env:
-          HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
+          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      # 8a. Upload APK đã ký
+      # 8a. Upload signed
       - name: Upload Signed Release APK
-        if: env.HAS_SIGNING_KEY == 'true'
+        if: env.HAS_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: FileManager-release-signed-v${{ github.run_number }}
           path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
           retention-days: 90
         env:
-          HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
+          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
-      # 8b. Upload APK chưa ký (fallback khi không có keystore)
+      # 8b. Upload unsigned fallback
       - name: Upload Unsigned Release APK
-        if: env.HAS_SIGNING_KEY != 'true'
+        if: env.HAS_KEY != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: FileManager-release-unsigned-v${{ github.run_number }}
           path: app/build/outputs/apk/release/*.apk
           retention-days: 90
         env:
-          HAS_SIGNING_KEY: ${{ secrets.SIGNING_KEY != '' }}
+          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
-      # 9. Tạo GitHub Release khi push tag vX.Y.Z
+      # 9. GitHub Release khi push tag
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
