@@ -9,13 +9,15 @@ on:
 
 jobs:
   build:
-    name: Build Debug & Release APK
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
+      # 1. Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. Set up Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -23,9 +25,27 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      # 3. Download Gradle & tạo wrapper (giải quyết thiếu gradle-wrapper.jar)
+      - name: Setup Gradle & generate wrapper
+        run: |
+          GRADLE_VERSION=8.4
+          echo "Downloading Gradle ${GRADLE_VERSION}..."
+          wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+               -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp/
+          export GRADLE_BIN="/tmp/gradle-${GRADLE_VERSION}/bin/gradle"
 
+          # Tạo wrapper vào project (ghi đè nếu đã có nhưng thiếu .jar)
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Generating Gradle wrapper..."
+            $GRADLE_BIN wrapper --gradle-version=${GRADLE_VERSION} --distribution-type=bin
+          fi
+
+          chmod +x gradlew
+          echo "Gradle wrapper ready:"
+          ls -lh gradle/wrapper/
+
+      # 4. Cache Gradle
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -33,27 +53,29 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          restore-keys: ${{ runner.os }}-gradle-
 
-      # ── Debug APK ──────────────────────────────────────────────
+      # 5. Build Debug APK
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
+      # 6. Upload Debug APK artifact
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: FileManager-debug-${{ github.run_number }}
+          name: FileManager-debug-v${{ github.run_number }}
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
-      # ── Release APK (signed) ───────────────────────────────────
-      - name: Build Release APK (unsigned)
-        run: ./gradlew assembleRelease --stacktrace
+      # 7. Build Release APK
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
+      # 8. Ký APK nếu có secrets
       - name: Sign Release APK
-        uses: r0adkll/sign-android-release@v1
         id: sign_apk
+        if: ${{ secrets.SIGNING_KEY != '' }}
+        uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEY }}
@@ -63,21 +85,34 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      - name: Upload Release APK (signed)
+      # 9a. Upload Release APK đã ký
+      - name: Upload Signed Release APK
+        if: ${{ secrets.SIGNING_KEY != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: FileManager-release-${{ github.run_number }}
+          name: FileManager-release-signed-v${{ github.run_number }}
           path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
           retention-days: 90
 
-      # ── Auto Release khi push tag v* ───────────────────────────
+      # 9b. Upload Release APK chưa ký (khi chưa có keystore)
+      - name: Upload Unsigned Release APK
+        if: ${{ secrets.SIGNING_KEY == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileManager-release-unsigned-v${{ github.run_number }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90
+
+      # 10. Tạo GitHub Release khi push tag vX.Y.Z
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: "FileManager ${{ github.ref_name }}"
+          generate_release_notes: true
           files: |
             app/build/outputs/apk/debug/*.apk
             ${{ steps.sign_apk.outputs.signedReleaseFile }}
-          generate_release_notes: true
+            app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
