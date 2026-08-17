@@ -14,6 +14,20 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Ký bằng debug key nếu không có release keystore (để CI build được)
+            signingConfig signingConfigs.debug
+        }
     }
 
     buildFeatures {
@@ -24,8 +38,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = '17'
+    }
+
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
     }
 }
 
@@ -39,6 +60,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.7.0'
     implementation 'androidx.activity:activity-ktx:1.8.2'
     implementation 'androidx.fragment:fragment-ktx:1.6.2'
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
 
     // Image loading
     implementation 'com.github.bumptech.glide:glide:4.16.0'
@@ -49,7 +71,4 @@ dependencies {
 
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-
-    // ViewPager2
-    implementation 'androidx.viewpager2:viewpager2:1.0.0'
 }
