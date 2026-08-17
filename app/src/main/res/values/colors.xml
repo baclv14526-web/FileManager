@@ -10,4 +10,5 @@
     <color name="md_theme_light_onPrimaryContainer">#001945</color>
     <color name="md_theme_dark_primary">#B0C6FF</color>
     <color name="md_theme_dark_primaryContainer">#00419E</color>
+    <color name="ic_launcher_background">#1565C0</color>
 </resources>
