@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_toggle_view"
+        android:icon="@drawable/ic_grid"
+        android:title="Toggle View"
+        app:showAsAction="always"/>
+    <item
+        android:id="@+id/action_sort"
+        android:icon="@drawable/ic_sort"
+        android:title="Sắp xếp"
+        app:showAsAction="always"/>
+</menu>

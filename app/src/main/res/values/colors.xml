@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="surface_variant">#F3F0F4</color>
+    <color name="error">#B3261E</color>
+    <color name="md_theme_light_primary">#1565C0</color>
+    <color name="md_theme_light_primaryContainer">#D9E4FF</color>
+    <color name="md_theme_light_onPrimaryContainer">#001945</color>
+    <color name="md_theme_dark_primary">#B0C6FF</color>
+    <color name="md_theme_dark_primaryContainer">#00419E</color>
+</resources>
