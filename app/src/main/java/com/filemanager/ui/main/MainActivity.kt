@@ -7,12 +7,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.StatFs
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -31,6 +33,7 @@ import com.filemanager.ui.viewer.ImageViewerActivity
 import com.filemanager.ui.viewer.VideoPlayerActivity
 import com.filemanager.utils.FileUtils
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -51,7 +54,8 @@ class MainActivity : AppCompatActivity() {
     private val manageStorageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            Environment.isExternalStorageManager()) {
             viewModel.navigateTo(viewModel.getStorageRoot())
         }
     }
@@ -67,6 +71,7 @@ class MainActivity : AppCompatActivity() {
         setupSidebar()
         setupObservers()
         setupBottomBar()
+        // FIX 1: Xin permission TRƯỚC, không làm gì khác trước đó
         checkPermissions()
     }
 
@@ -119,18 +124,26 @@ class MainActivity : AppCompatActivity() {
             binding.drawerLayout.openDrawer(binding.navDrawer)
         }
 
-        // Storage info
+        // FIX 2: Bọc StatFs trong try-catch — Android 9 có thể chưa mount storage khi gọi
         updateStorageInfo()
     }
 
     private fun updateStorageInfo() {
-        val stat = android.os.StatFs(viewModel.getStorageRoot())
-        val total = stat.totalBytes
-        val free = stat.availableBytes
-        val used = total - free
-        val pct = ((used.toFloat() / total) * 100).toInt()
-        binding.storageProgress.progress = pct
-        binding.tvStorageInfo.text = "${FileUtils.formatSize(used)} / ${FileUtils.formatSize(total)} đã dùng"
+        try {
+            val root = viewModel.getStorageRoot()
+            val stat = StatFs(root)
+            val total = stat.totalBytes
+            val free = stat.availableBytes
+            val used = total - free
+            val pct = if (total > 0) ((used.toFloat() / total) * 100).toInt() else 0
+            binding.storageProgress.progress = pct
+            binding.tvStorageInfo.text =
+                "${FileUtils.formatSize(used)} / ${FileUtils.formatSize(total)} đã dùng"
+        } catch (e: Exception) {
+            // Storage chưa sẵn sàng — ẩn widget đi, không crash
+            binding.tvStorageInfo.text = "Đang tải..."
+            binding.storageProgress.progress = 0
+        }
     }
 
     private fun setupObservers() {
@@ -138,21 +151,25 @@ class MainActivity : AppCompatActivity() {
             val query = binding.searchEditText.text?.toString() ?: ""
             if (query.isEmpty()) {
                 fileAdapter.submitList(files)
-                binding.emptyView.visibility = if (files.isEmpty()) View.VISIBLE else View.GONE
+                binding.emptyView.visibility =
+                    if (files.isEmpty()) View.VISIBLE else View.GONE
             }
         }
 
         viewModel.searchResults.observe(this) { results ->
             if (results != null) {
                 fileAdapter.submitList(results)
-                binding.emptyView.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
-                binding.emptyText.text = if (results.isEmpty()) "Không tìm thấy kết quả" else ""
+                binding.emptyView.visibility =
+                    if (results.isEmpty()) View.VISIBLE else View.GONE
+                binding.emptyText.text =
+                    if (results.isEmpty()) "Không tìm thấy kết quả" else ""
             }
         }
 
         viewModel.currentPath.observe(this) { path ->
             binding.tvCurrentPath.text = path
-            supportActionBar?.title = path.substringAfterLast("/").ifEmpty { "File Manager" }
+            val name = path.substringAfterLast("/").ifEmpty { "File Manager" }
+            supportActionBar?.title = name
         }
 
         viewModel.isLoading.observe(this) { loading ->
@@ -161,8 +178,8 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.isSelectionMode.observe(this) { selMode ->
             binding.bottomActionBar.visibility = if (selMode) View.VISIBLE else View.GONE
-            binding.searchBar.visibility = if (selMode) View.GONE else View.VISIBLE
-            binding.fabNewFolder.visibility = if (selMode) View.GONE else View.VISIBLE
+            binding.searchBar.visibility    = if (selMode) View.GONE  else View.VISIBLE
+            binding.fabNewFolder.visibility = if (selMode) View.GONE  else View.VISIBLE
             invalidateOptionsMenu()
         }
 
@@ -172,16 +189,15 @@ class MainActivity : AppCompatActivity() {
                 supportActionBar?.title = "$count đã chọn"
             } else {
                 val path = viewModel.currentPath.value ?: ""
-                supportActionBar?.title = path.substringAfterLast("/").ifEmpty { "File Manager" }
+                supportActionBar?.title =
+                    path.substringAfterLast("/").ifEmpty { "File Manager" }
             }
         }
 
         viewModel.isGridView.observe(this) { isGrid ->
-            val span = if (isGrid) 3 else 1
-            binding.recyclerView.layoutManager = if (isGrid)
-                GridLayoutManager(this, span)
-            else
-                LinearLayoutManager(this)
+            binding.recyclerView.layoutManager =
+                if (isGrid) GridLayoutManager(this, 3)
+                else        LinearLayoutManager(this)
             fileAdapter.setViewType(isGrid)
             invalidateOptionsMenu()
         }
@@ -199,9 +215,7 @@ class MainActivity : AppCompatActivity() {
             MaterialAlertDialogBuilder(this)
                 .setTitle("Xóa vào thùng rác")
                 .setMessage("Chuyển ${items.size} mục vào thùng rác?")
-                .setPositiveButton("Xóa") { _, _ ->
-                    viewModel.moveSelectedToTrash()
-                }
+                .setPositiveButton("Xóa") { _, _ -> viewModel.moveSelectedToTrash() }
                 .setNegativeButton("Hủy", null)
                 .show()
         }
@@ -210,13 +224,15 @@ class MainActivity : AppCompatActivity() {
         binding.btnShare.setOnClickListener { shareSelectedFiles() }
     }
 
+    // ── File actions ────────────────────────────────────────────
+
     private fun onFileItemClick(item: FileItem) {
         if (viewModel.isSelectionMode.value == true) {
             viewModel.toggleSelection(item)
             return
         }
         when {
-            item.isDirectory -> {
+            item.isDirectory              -> {
                 binding.searchEditText.text?.clear()
                 viewModel.navigateTo(item.path)
             }
@@ -231,7 +247,6 @@ class MainActivity : AppCompatActivity() {
             viewModel.toggleSelection(item)
             return
         }
-        // Show context menu
         val options = arrayOf("Chọn", "Đổi tên", "Chia sẻ", "Thuộc tính", "Xóa vào thùng rác")
         AlertDialog.Builder(this)
             .setTitle(item.name)
@@ -242,8 +257,7 @@ class MainActivity : AppCompatActivity() {
                     2 -> FileUtils.shareFiles(this, listOf(item.file))
                     3 -> FilePropertiesDialog.newInstance(item)
                             .show(supportFragmentManager, "props")
-                    4 -> {
-                        MaterialAlertDialogBuilder(this)
+                    4 -> MaterialAlertDialogBuilder(this)
                             .setTitle("Xóa vào thùng rác")
                             .setMessage("Chuyển \"${item.name}\" vào thùng rác?")
                             .setPositiveButton("Xóa") { _, _ ->
@@ -252,58 +266,28 @@ class MainActivity : AppCompatActivity() {
                             }
                             .setNegativeButton("Hủy", null)
                             .show()
-                    }
                 }
             }
             .show()
     }
 
-    private fun showRenameDialog(item: FileItem) {
-        val editText = android.widget.EditText(this).apply {
-            setText(item.name)
-            selectAll()
-            setPadding(48, 24, 48, 8)
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Đổi tên")
-            .setView(editText)
-            .setPositiveButton("Đổi tên") { _, _ ->
-                val newName = editText.text.toString().trim()
-                if (newName.isNotEmpty() && newName != item.name) {
-                    val newFile = java.io.File(item.file.parent, newName)
-                    if (item.file.renameTo(newFile)) {
-                        viewModel.refresh()
-                        Toast.makeText(this, "Đã đổi tên thành công", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Không thể đổi tên", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            .setNegativeButton("Hủy", null)
-            .show()
-    }
-
-    private fun onSelectionChange(item: FileItem) {
-        viewModel.toggleSelection(item)
-    }
+    private fun onSelectionChange(item: FileItem) = viewModel.toggleSelection(item)
 
     private fun openImageViewer(item: FileItem) {
         val images = viewModel.files.value
             ?.filter { it.fileType == FileType.IMAGE }
             ?.map { it.path } ?: listOf(item.path)
         val index = images.indexOf(item.path).coerceAtLeast(0)
-        val intent = Intent(this, ImageViewerActivity::class.java).apply {
+        startActivity(Intent(this, ImageViewerActivity::class.java).apply {
             putStringArrayListExtra(ImageViewerActivity.EXTRA_PATHS, ArrayList(images))
             putExtra(ImageViewerActivity.EXTRA_INDEX, index)
-        }
-        startActivity(intent)
+        })
     }
 
     private fun openVideoPlayer(item: FileItem) {
-        val intent = Intent(this, VideoPlayerActivity::class.java).apply {
+        startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
             putExtra(VideoPlayerActivity.EXTRA_PATH, item.path)
-        }
-        startActivity(intent)
+        })
     }
 
     private fun shareSelectedFiles() {
@@ -312,61 +296,49 @@ class MainActivity : AppCompatActivity() {
         FileUtils.shareFiles(this, items.map { it.file })
     }
 
-    override fun onBackPressed() {
-        when {
-            binding.drawerLayout.isDrawerOpen(binding.navDrawer) ->
-                binding.drawerLayout.closeDrawers()
-            viewModel.isSelectionMode.value == true ->
-                viewModel.exitSelectionMode()
-            !binding.searchEditText.text.isNullOrEmpty() -> {
-                binding.searchEditText.text?.clear()
-                viewModel.clearSearch()
-            }
-            !viewModel.navigateUp() -> super.onBackPressed()
-        }
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        val selMode = viewModel.isSelectionMode.value == true
-        menu.findItem(R.id.action_sort)?.isVisible = !selMode
-        menu.findItem(R.id.action_toggle_view)?.isVisible = !selMode
-        menu.findItem(R.id.action_toggle_view)?.setIcon(
-            if (viewModel.isGridView.value == true) R.drawable.ic_list else R.drawable.ic_grid
-        )
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_sort -> showSortDialog()
-            R.id.action_toggle_view -> { viewModel.toggleGridView(); true }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
+    // ── Dialogs ─────────────────────────────────────────────────
 
     private fun showNewFolderDialog() {
-        val editText = android.widget.EditText(this).apply {
+        val et = EditText(this).apply {
             hint = "Tên thư mục"
             setPadding(48, 24, 48, 8)
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("Tạo thư mục mới")
-            .setView(editText)
+            .setView(et)
             .setPositiveButton("Tạo") { _, _ ->
-                val name = editText.text.toString().trim()
-                if (name.isNotEmpty()) {
-                    val currentPath = viewModel.currentPath.value ?: return@setPositiveButton
-                    val newDir = java.io.File(currentPath, name)
-                    if (newDir.mkdirs()) {
+                val name = et.text.toString().trim()
+                if (name.isEmpty()) return@setPositiveButton
+                val cur = viewModel.currentPath.value ?: return@setPositiveButton
+                if (File(cur, name).mkdirs()) {
+                    viewModel.refresh()
+                    Toast.makeText(this, "Đã tạo \"$name\"", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Không thể tạo thư mục", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showRenameDialog(item: FileItem) {
+        val et = EditText(this).apply {
+            setText(item.name)
+            selectAll()
+            setPadding(48, 24, 48, 8)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Đổi tên")
+            .setView(et)
+            .setPositiveButton("Đổi tên") { _, _ ->
+                val newName = et.text.toString().trim()
+                if (newName.isNotEmpty() && newName != item.name) {
+                    val dest = File(item.file.parent, newName)
+                    if (item.file.renameTo(dest)) {
                         viewModel.refresh()
-                        Toast.makeText(this, "Đã tạo thư mục \"$name\"", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Đã đổi tên", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this, "Không thể tạo thư mục", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Không thể đổi tên", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -381,30 +353,45 @@ class MainActivity : AppCompatActivity() {
             "Ngày cũ nhất", "Ngày mới nhất",
             "Theo loại file"
         )
-        val sorts = SortType.values()
         AlertDialog.Builder(this)
             .setTitle("Sắp xếp theo")
             .setItems(options) { _, which ->
-                viewModel.setSortType(sorts[which])
+                viewModel.setSortType(SortType.values()[which])
             }
             .show()
         return true
     }
 
+    // ── Permissions ─────────────────────────────────────────────
+
     private fun checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                showPermissionDialog()
+        when {
+            // Android 11+ : MANAGE_EXTERNAL_STORAGE
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                if (!Environment.isExternalStorageManager()) showPermissionDialog()
+                else viewModel.navigateTo(viewModel.getStorageRoot())
             }
-        } else {
-            val perms = arrayOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-            val denied = perms.filter {
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            // Android 6-10 : READ/WRITE runtime permission
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                val perms = mutableListOf<String>()
+                if (ContextCompat.checkSelfPermission(this,
+                        Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED)
+                    perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                if (ContextCompat.checkSelfPermission(this,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED)
+                    perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+
+                if (perms.isEmpty()) {
+                    // FIX 3: Đã có permission rồi → navigate ngay, không hiện dialog
+                    viewModel.navigateTo(viewModel.getStorageRoot())
+                } else {
+                    permissionLauncher.launch(perms.toTypedArray())
+                }
             }
-            if (denied.isNotEmpty()) permissionLauncher.launch(denied.toTypedArray())
+            // Android < 6 : không cần xin runtime
+            else -> viewModel.navigateTo(viewModel.getStorageRoot())
         }
     }
 
@@ -414,10 +401,20 @@ class MainActivity : AppCompatActivity() {
             .setMessage("App cần quyền truy cập bộ nhớ để quản lý file.")
             .setPositiveButton("Cấp quyền") { _, _ ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                        data = Uri.parse("package:$packageName")
+                    // FIX 4: ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+                    // crash trên một số ROM nếu package URI thiếu — bọc try-catch
+                    try {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                        manageStorageLauncher.launch(intent)
+                    } catch (e: Exception) {
+                        // Fallback: mở trang Settings tổng
+                        manageStorageLauncher.launch(
+                            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        )
                     }
-                    manageStorageLauncher.launch(intent)
                 } else {
                     permissionLauncher.launch(arrayOf(
                         Manifest.permission.READ_EXTERNAL_STORAGE,
@@ -427,5 +424,45 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Thoát") { _, _ -> finish() }
             .show()
+    }
+
+    // ── Menu ────────────────────────────────────────────────────
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val sel = viewModel.isSelectionMode.value == true
+        menu.findItem(R.id.action_sort)?.isVisible        = !sel
+        menu.findItem(R.id.action_toggle_view)?.isVisible = !sel
+        menu.findItem(R.id.action_toggle_view)?.setIcon(
+            if (viewModel.isGridView.value == true) R.drawable.ic_list else R.drawable.ic_grid
+        )
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_sort        -> showSortDialog()
+            R.id.action_toggle_view -> { viewModel.toggleGridView(); true }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        when {
+            binding.drawerLayout.isDrawerOpen(binding.navDrawer) ->
+                binding.drawerLayout.closeDrawers()
+            viewModel.isSelectionMode.value == true ->
+                viewModel.exitSelectionMode()
+            !binding.searchEditText.text.isNullOrEmpty() -> {
+                binding.searchEditText.text?.clear()
+                viewModel.clearSearch()
+            }
+            !viewModel.navigateUp() -> super.onBackPressed()
+        }
     }
 }

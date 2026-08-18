@@ -14,17 +14,23 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        // Cần cho vector drawable trên Android cũ
         vectorDrawables.useSupportLibrary = true
+
+        // Tránh 64K method limit
+        multiDexEnabled true
     }
 
     buildTypes {
         debug {
             debuggable true
+            minifyEnabled false
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Ký bằng debug key nếu không có release keystore (để CI build được)
+            // Dùng debug key nếu không có release keystore
             signingConfig signingConfigs.debug
         }
     }
@@ -60,6 +66,7 @@ dependencies {
     implementation 'androidx.activity:activity-ktx:1.8.2'
     implementation 'androidx.fragment:fragment-ktx:1.6.2'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'androidx.multidex:multidex:2.0.1'
 
     // Image loading
     implementation 'com.github.bumptech.glide:glide:4.16.0'
