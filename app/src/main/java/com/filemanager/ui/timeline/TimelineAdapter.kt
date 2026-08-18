@@ -24,17 +24,23 @@ class TimelineAdapter(
         const val TYPE_MEDIA  = 1
 
         val DIFF = object : DiffUtil.ItemCallback<TimelineListItem>() {
-            override fun areItemsTheSame(old: TimelineListItem, new: TimelineListItem): Boolean =
-                when {
-                    old is TimelineListItem.Header    && new is TimelineListItem.Header    -> old.title == new.title
-                    old is TimelineListItem.MediaItem && new is TimelineListItem.MediaItem -> old.file.path == new.file.path
-                    else -> false
-                }
-            override fun areContentsTheSame(old: TimelineListItem, new: TimelineListItem) = old == new
+            override fun areItemsTheSame(old: TimelineListItem, new: TimelineListItem) = when {
+                old is TimelineListItem.Header    && new is TimelineListItem.Header    ->
+                    old.title == new.title
+                old is TimelineListItem.MediaItem && new is TimelineListItem.MediaItem ->
+                    old.file.path == new.file.path
+                else -> false
+            }
+            override fun areContentsTheSame(old: TimelineListItem, new: TimelineListItem): Boolean {
+                if (old is TimelineListItem.Header && new is TimelineListItem.Header)
+                    return old.title == new.title &&
+                           old.count == new.count &&
+                           old.isExpanded == new.isExpanded
+                return old == new
+            }
         }
     }
 
-    // FIX: kiểm tra bounds trước khi trả về type
     fun isHeader(position: Int): Boolean {
         if (position < 0 || position >= itemCount) return false
         return getItemViewType(position) == TYPE_HEADER
@@ -46,11 +52,11 @@ class TimelineAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val inflater = LayoutInflater.from(parent.context)
+        val inf = LayoutInflater.from(parent.context)
         return if (viewType == TYPE_HEADER)
-            HeaderVH(ItemTimelineHeaderBinding.inflate(inflater, parent, false))
+            HeaderVH(ItemTimelineHeaderBinding.inflate(inf, parent, false))
         else
-            MediaVH(ItemTimelineMediaBinding.inflate(inflater, parent, false))
+            MediaVH(ItemTimelineMediaBinding.inflate(inf, parent, false))
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
@@ -60,23 +66,37 @@ class TimelineAdapter(
         }
     }
 
-    // FIX: clear Glide khi view được recycle để không hiện ảnh cũ
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
-        if (holder is MediaVH) {
-            Glide.with(holder.itemView.context).clear(holder.binding.ivThumb)
-        }
+        if (holder is MediaVH) Glide.with(holder.itemView).clear(holder.binding.ivThumb)
     }
 
     inner class HeaderVH(private val binding: ItemTimelineHeaderBinding) :
         RecyclerView.ViewHolder(binding.root) {
-        fun bind(item: TimelineListItem.Header) {
-            binding.tvMonth.text = item.title
+
+        fun bind(header: TimelineListItem.Header) {
+            binding.tvMonth.text = header.title
+            binding.tvCount.text = "${header.count} mục"
+
+            // Xoay mũi tên theo trạng thái
+            binding.ivChevron.rotation = if (header.isExpanded) 0f else -90f
+            binding.ivChevron.setImageResource(
+                if (header.isExpanded) R.drawable.ic_chevron_down
+                else R.drawable.ic_chevron_right
+            )
+
+            binding.root.setOnClickListener {
+                // Lấy position hiện tại (dùng bindingAdapterPosition để tránh stale)
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_ID.toInt()) return@setOnClickListener
+                onHeaderClick(header.title)
+            }
         }
     }
 
     inner class MediaVH(val binding: ItemTimelineMediaBinding) :
         RecyclerView.ViewHolder(binding.root) {
+
         fun bind(item: FileItem) {
             Glide.with(binding.root)
                 .load(File(item.path))
@@ -92,4 +112,9 @@ class TimelineAdapter(
             binding.root.setOnClickListener { onItemClick(item) }
         }
     }
+
+    // ── Collapse / Expand logic ─────────────────────────────────
+
+    // Callback để ViewModel xử lý toggle
+    var onHeaderClick: (title: String) -> Unit = {}
 }

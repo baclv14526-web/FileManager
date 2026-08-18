@@ -2,23 +2,43 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="48dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:paddingHorizontal="16dp"
-    android:paddingVertical="12dp">
+    android:background="?attr/selectableItemBackground">
 
+    <!-- Thanh màu bên trái -->
     <View
         android:layout_width="3dp"
-        android:layout_height="20dp"
-        android:background="?attr/colorPrimary"
+        android:layout_height="22dp"
+        android:background="#1565C0"
         android:layout_marginEnd="12dp"/>
 
+    <!-- Tên tháng/năm -->
     <TextView
         android:id="@+id/tvMonth"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:textColor="#1F1F1F"/>
+
+    <!-- Số lượng ảnh trong tháng -->
+    <TextView
+        android:id="@+id/tvCount"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurface"/>
+        android:textSize="12sp"
+        android:textColor="#49454F"
+        android:layout_marginEnd="8dp"/>
+
+    <!-- Icon mũi tên collapse/expand -->
+    <ImageView
+        android:id="@+id/ivChevron"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_chevron_down"/>
+
 </LinearLayout>
