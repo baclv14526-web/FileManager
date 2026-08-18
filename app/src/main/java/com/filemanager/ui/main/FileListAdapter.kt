@@ -91,6 +91,8 @@ class FileListAdapter(
                         .into(binding.ivThumbnail)
                 }
                 else -> {
+                    Glide.with(binding.root).clear(binding.ivThumbnail)
+                    binding.ivThumbnail.setImageDrawable(null)
                     binding.ivThumbnail.visibility = View.GONE
                     binding.ivIcon.visibility = View.VISIBLE
                     binding.ivIcon.setImageResource(getIconForType(item.fileType))

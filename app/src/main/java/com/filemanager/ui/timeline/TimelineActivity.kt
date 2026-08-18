@@ -7,7 +7,6 @@ import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
-import com.filemanager.R
 import com.filemanager.data.model.FileItem
 import com.filemanager.data.model.FileType
 import com.filemanager.data.repository.TimelineMediaType
@@ -33,16 +32,17 @@ class TimelineActivity : AppCompatActivity() {
         setupRecyclerView()
         setupChips()
         setupObservers()
-
         viewModel.loadMedia(TimelineMediaType.ALL)
     }
 
     private fun setupRecyclerView() {
         adapter = TimelineAdapter { item -> openMedia(item) }
+
         val gridLayoutManager = GridLayoutManager(this, 3)
         gridLayoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
             override fun getSpanSize(position: Int): Int {
-                return if (adapter.isHeader(position)) 3 else 1
+                // FIX: kiểm tra position hợp lệ trước khi gọi isHeader
+                return if (position >= 0 && position < adapter.itemCount && adapter.isHeader(position)) 3 else 1
             }
         }
         binding.recyclerView.layoutManager = gridLayoutManager
@@ -50,7 +50,7 @@ class TimelineActivity : AppCompatActivity() {
     }
 
     private fun setupChips() {
-        binding.chipAll.setOnClickListener { viewModel.loadMedia(TimelineMediaType.ALL) }
+        binding.chipAll.setOnClickListener    { viewModel.loadMedia(TimelineMediaType.ALL) }
         binding.chipImages.setOnClickListener { viewModel.loadMedia(TimelineMediaType.IMAGES) }
         binding.chipVideos.setOnClickListener { viewModel.loadMedia(TimelineMediaType.VIDEOS) }
     }
@@ -66,24 +66,45 @@ class TimelineActivity : AppCompatActivity() {
     }
 
     private fun openMedia(item: FileItem) {
-        when (item.fileType) {
-            FileType.IMAGE -> {
-                val allImages = viewModel.allImagePaths
-                val index = allImages.indexOf(item.path).coerceAtLeast(0)
-                val intent = Intent(this, ImageViewerActivity::class.java).apply {
-                    putStringArrayListExtra(ImageViewerActivity.EXTRA_PATHS, ArrayList(allImages))
-                    putExtra(ImageViewerActivity.EXTRA_INDEX, index)
+        try {
+            when (item.fileType) {
+                FileType.IMAGE -> {
+                    // FIX: Không truyền toàn bộ danh sách qua Intent (TransactionTooLargeException)
+                    // Chỉ truyền path hiện tại + index, ViewModel giữ danh sách
+                    val allImages = viewModel.allImagePaths
+                    val index = allImages.indexOf(item.path).coerceAtLeast(0)
+
+                    // Giới hạn 200 ảnh xung quanh vị trí hiện tại để tránh vượt Binder 1MB
+                    val start  = (index - 100).coerceAtLeast(0)
+                    val end    = (index + 100).coerceAtMost(allImages.size)
+                    val subList = allImages.subList(start, end)
+                    val newIndex = index - start
+
+                    startActivity(Intent(this, ImageViewerActivity::class.java).apply {
+                        putStringArrayListExtra(ImageViewerActivity.EXTRA_PATHS, ArrayList(subList))
+                        putExtra(ImageViewerActivity.EXTRA_INDEX, newIndex)
+                    })
                 }
-                startActivity(intent)
+                FileType.VIDEO -> {
+                    startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                        putExtra(VideoPlayerActivity.EXTRA_PATH, item.path)
+                    })
+                }
+                else -> {}
             }
-            FileType.VIDEO -> {
-                startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
-                    putExtra(VideoPlayerActivity.EXTRA_PATH, item.path)
+        } catch (e: Exception) {
+            // Fallback: mở ảnh đơn lẻ nếu vẫn lỗi
+            if (item.fileType == FileType.IMAGE) {
+                startActivity(Intent(this, ImageViewerActivity::class.java).apply {
+                    putStringArrayListExtra(ImageViewerActivity.EXTRA_PATHS, arrayListOf(item.path))
+                    putExtra(ImageViewerActivity.EXTRA_INDEX, 0)
                 })
             }
-            else -> {}
         }
     }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onBackPressed() = super.onBackPressed()
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) { onBackPressed(); return true }
