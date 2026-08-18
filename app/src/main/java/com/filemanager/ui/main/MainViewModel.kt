@@ -1,6 +1,7 @@
 package com.filemanager.ui.main
 
 import android.app.Application
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -14,10 +15,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = FileRepository(app)
 
-    private val _files = MutableLiveData<List<FileItem>>()
+    private val _files = MutableLiveData<List<FileItem>>(emptyList())
     val files: LiveData<List<FileItem>> = _files
 
-    private val _currentPath = MutableLiveData<String>()
+    private val _currentPath = MutableLiveData<String>("")
     val currentPath: LiveData<String> = _currentPath
 
     private val _searchResults = MutableLiveData<List<FileItem>?>()
@@ -43,18 +44,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val pathHistory = ArrayDeque<String>()
 
-    init {
-        navigateTo(repository.getStorageRoot())
-    }
+    // FIX: KHÔNG gọi gì trong init — chờ MainActivity xin permission xong mới navigate
+    // init { } để trống hoàn toàn
 
     fun navigateTo(path: String) {
-        val current = _currentPath.value
-        if (current != null && current != path) {
-            pathHistory.addLast(current)
+        try {
+            val current = _currentPath.value
+            if (!current.isNullOrEmpty() && current != path) {
+                pathHistory.addLast(current)
+            }
+            _currentPath.value = path
+            loadFiles(path)
+            exitSelectionMode()
+        } catch (e: Exception) {
+            _toastMessage.value = "Không thể mở: ${e.message}"
         }
-        _currentPath.value = path
-        loadFiles(path)
-        exitSelectionMode()
     }
 
     fun navigateUp(): Boolean {
@@ -69,38 +73,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadFiles(path: String) {
         viewModelScope.launch {
             _isLoading.value = true
-            _files.value = repository.getFiles(path, _sortType.value ?: SortType.NAME_ASC)
-            _isLoading.value = false
+            try {
+                _files.value = repository.getFiles(path, _sortType.value ?: SortType.NAME_ASC)
+            } catch (e: Exception) {
+                _files.value = emptyList()
+                _toastMessage.value = "Lỗi đọc thư mục: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
     fun search(query: String) {
-        if (query.isBlank()) {
-            _searchResults.value = null
-            return
-        }
+        if (query.isBlank()) { _searchResults.value = null; return }
         viewModelScope.launch {
             _isLoading.value = true
-            val root = _currentPath.value ?: repository.getStorageRoot()
-            _searchResults.value = repository.searchFiles(query, root)
-            _isLoading.value = false
+            try {
+                val root = _currentPath.value?.ifEmpty { getStorageRoot() } ?: getStorageRoot()
+                _searchResults.value = repository.searchFiles(query, root)
+            } catch (e: Exception) {
+                _searchResults.value = emptyList()
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
-    fun clearSearch() {
-        _searchResults.value = null
-    }
+    fun clearSearch() { _searchResults.value = null }
 
     fun setSortType(sort: SortType) {
         _sortType.value = sort
-        loadFiles(_currentPath.value ?: repository.getStorageRoot())
+        val path = _currentPath.value?.ifEmpty { null } ?: return
+        loadFiles(path)
     }
 
-    fun toggleGridView() {
-        _isGridView.value = !(_isGridView.value ?: false)
-    }
+    fun toggleGridView() { _isGridView.value = !(_isGridView.value ?: false) }
 
-    // Selection
     fun enterSelectionMode(path: String) {
         _isSelectionMode.value = true
         _selectedFiles.value = setOf(path)
@@ -109,16 +117,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSelection(item: FileItem) {
         val current = _selectedFiles.value?.toMutableSet() ?: mutableSetOf()
-        if (item.path in current) current.remove(item.path)
-        else current.add(item.path)
+        if (item.path in current) current.remove(item.path) else current.add(item.path)
         _selectedFiles.value = current
         if (current.isEmpty()) exitSelectionMode()
         refreshFileSelection()
     }
 
     fun selectAll() {
-        val allPaths = _files.value?.map { it.path }?.toSet() ?: emptySet()
-        _selectedFiles.value = allPaths
+        _selectedFiles.value = _files.value?.map { it.path }?.toSet() ?: emptySet()
         refreshFileSelection()
     }
 
@@ -142,21 +148,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val items = getSelectedItems()
         if (items.isEmpty()) return
         viewModelScope.launch {
-            val success = repository.moveToTrash(items)
-            if (success) {
-                _toastMessage.value = "Đã chuyển ${items.size} mục vào thùng rác"
-                exitSelectionMode()
-                loadFiles(_currentPath.value ?: repository.getStorageRoot())
-            } else {
-                _toastMessage.value = "Không thể xóa một số file"
+            try {
+                val success = repository.moveToTrash(items)
+                if (success) {
+                    _toastMessage.value = "Đã chuyển ${items.size} mục vào thùng rác"
+                    exitSelectionMode()
+                    val path = _currentPath.value?.ifEmpty { null } ?: return@launch
+                    loadFiles(path)
+                } else {
+                    _toastMessage.value = "Không thể xóa một số file"
+                }
+            } catch (e: Exception) {
+                _toastMessage.value = "Lỗi: ${e.message}"
             }
         }
     }
 
     fun refresh() {
-        loadFiles(_currentPath.value ?: repository.getStorageRoot())
+        val path = _currentPath.value?.ifEmpty { null } ?: return
+        loadFiles(path)
     }
 
+    fun getStorageRoot(): String = try {
+        Environment.getExternalStorageDirectory()?.absolutePath ?: "/sdcard"
+    } catch (e: Exception) { "/sdcard" }
+
     fun getQuickAccessPaths() = repository.getQuickAccessPaths()
-    fun getStorageRoot() = repository.getStorageRoot()
 }

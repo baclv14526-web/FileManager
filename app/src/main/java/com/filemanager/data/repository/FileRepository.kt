@@ -1,11 +1,9 @@
 package com.filemanager.data.repository
 
 import android.content.Context
-import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import com.filemanager.data.model.FileItem
-import com.filemanager.data.model.FileType
 import com.filemanager.data.model.SortType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,166 +15,139 @@ class FileRepository(private val context: Context) {
 
     suspend fun getFiles(path: String, sortType: SortType = SortType.NAME_ASC): List<FileItem> =
         withContext(Dispatchers.IO) {
-            val dir = File(path)
-            if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
-            val files = dir.listFiles()?.map { FileItem(it) } ?: emptyList()
-            sortFiles(files, sortType)
+            try {
+                val dir = File(path)
+                if (!dir.exists() || !dir.isDirectory || !dir.canRead())
+                    return@withContext emptyList()
+                val files = dir.listFiles()?.map { FileItem(it) } ?: emptyList()
+                sortFiles(files, sortType)
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
 
     suspend fun searchFiles(query: String, rootPath: String): List<FileItem> =
         withContext(Dispatchers.IO) {
-            val results = mutableListOf<FileItem>()
-            searchRecursive(File(rootPath), query.lowercase(), results)
-            results.sortedBy { it.name.lowercase() }
+            try {
+                val results = mutableListOf<FileItem>()
+                searchRecursive(File(rootPath), query.lowercase(), results)
+                results.sortedBy { it.name.lowercase() }
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
 
     private fun searchRecursive(dir: File, query: String, results: MutableList<FileItem>) {
         if (!dir.exists() || !dir.canRead()) return
-        dir.listFiles()?.forEach { file ->
-            if (file.name.lowercase().contains(query)) {
-                results.add(FileItem(file))
+        try {
+            dir.listFiles()?.forEach { file ->
+                if (file.name.lowercase().contains(query)) results.add(FileItem(file))
+                if (file.isDirectory && !file.name.startsWith("."))
+                    searchRecursive(file, query, results)
             }
-            if (file.isDirectory && !file.name.startsWith(".")) {
-                searchRecursive(file, query, results)
-            }
-        }
+        } catch (e: Exception) { /* bỏ qua thư mục không đọc được */ }
     }
 
     suspend fun getMediaByTimeline(type: TimelineMediaType): Map<String, List<FileItem>> =
         withContext(Dispatchers.IO) {
-            val projection = when (type) {
-                TimelineMediaType.IMAGES -> arrayOf(
-                    MediaStore.Images.Media._ID,
-                    MediaStore.Images.Media.DATA,
-                    MediaStore.Images.Media.DATE_TAKEN,
-                    MediaStore.Images.Media.DISPLAY_NAME,
-                    MediaStore.Images.Media.SIZE
-                )
-                TimelineMediaType.VIDEOS -> arrayOf(
-                    MediaStore.Video.Media._ID,
-                    MediaStore.Video.Media.DATA,
-                    MediaStore.Video.Media.DATE_TAKEN,
-                    MediaStore.Video.Media.DISPLAY_NAME,
-                    MediaStore.Video.Media.SIZE
-                )
-                TimelineMediaType.ALL -> arrayOf(
-                    MediaStore.Images.Media._ID,
-                    MediaStore.Images.Media.DATA,
-                    MediaStore.Images.Media.DATE_TAKEN,
-                    MediaStore.Images.Media.DISPLAY_NAME,
-                    MediaStore.Images.Media.SIZE
-                )
-            }
-
-            val uri = when (type) {
-                TimelineMediaType.IMAGES -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                TimelineMediaType.VIDEOS -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                TimelineMediaType.ALL -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            }
-
-            val items = mutableListOf<FileItem>()
-            val cursor = context.contentResolver.query(
-                uri, projection, null, null,
-                "${MediaStore.Images.Media.DATE_TAKEN} DESC"
-            )
-            cursor?.use {
-                val dataCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-                while (it.moveToNext()) {
-                    val path = it.getString(dataCol) ?: continue
-                    val file = File(path)
-                    if (file.exists()) items.add(FileItem(file))
-                }
-            }
-
-            if (type == TimelineMediaType.ALL || type == TimelineMediaType.VIDEOS) {
-                val videoCursor = context.contentResolver.query(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Video.Media.DATA, MediaStore.Video.Media.DATE_TAKEN),
-                    null, null,
-                    "${MediaStore.Video.Media.DATE_TAKEN} DESC"
-                )
-                videoCursor?.use {
-                    val dataCol = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
-                    while (it.moveToNext()) {
-                        val path = it.getString(dataCol) ?: continue
-                        val file = File(path)
-                        if (file.exists()) items.add(FileItem(file))
-                    }
-                }
-            }
-
-            // Group by year-month
-            val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
-            val grouped = TreeMap<String, MutableList<FileItem>>(compareByDescending {
-                val parts = it.split(" ")
-                try {
-                    val date = sdf.parse(it)
-                    date?.time?.unaryMinus() ?: 0L
-                } catch (e: Exception) { 0L }
-            })
-
-            items.sortedByDescending { it.lastModified }.forEach { item ->
-                val key = sdf.format(Date(item.lastModified))
-                grouped.getOrPut(key) { mutableListOf() }.add(item)
-            }
-            grouped
-        }
-
-    suspend fun moveToTrash(files: List<FileItem>): Boolean = withContext(Dispatchers.IO) {
-        val trashDir = File(
-            context.getExternalFilesDir(null), ".trash"
-        ).also { it.mkdirs() }
-
-        files.all { item ->
             try {
-                val dest = File(trashDir, "${System.currentTimeMillis()}_${item.name}")
-                item.file.renameTo(dest)
-            } catch (e: Exception) { false }
+                val items = mutableListOf<FileItem>()
+
+                if (type == TimelineMediaType.IMAGES || type == TimelineMediaType.ALL) {
+                    queryMedia(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        MediaStore.Images.Media.DATA,
+                        MediaStore.Images.Media.DATE_TAKEN
+                    ).forEach { items.add(it) }
+                }
+
+                if (type == TimelineMediaType.VIDEOS || type == TimelineMediaType.ALL) {
+                    queryMedia(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        MediaStore.Video.Media.DATA,
+                        MediaStore.Video.Media.DATE_TAKEN
+                    ).forEach { items.add(it) }
+                }
+
+                val sdf = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+                val grouped = linkedMapOf<String, MutableList<FileItem>>()
+
+                items.sortedByDescending { it.lastModified }.forEach { item ->
+                    val key = sdf.format(Date(item.lastModified))
+                    grouped.getOrPut(key) { mutableListOf() }.add(item)
+                }
+                grouped
+            } catch (e: Exception) {
+                emptyMap()
+            }
         }
+
+    private fun queryMedia(uri: android.net.Uri, dataCol: String, dateCol: String): List<FileItem> {
+        val result = mutableListOf<FileItem>()
+        try {
+            val projection = arrayOf(dataCol, dateCol)
+            context.contentResolver.query(
+                uri, projection, null, null, "$dateCol DESC"
+            )?.use { cursor ->
+                val col = cursor.getColumnIndexOrThrow(dataCol)
+                while (cursor.moveToNext()) {
+                    val path = cursor.getString(col) ?: continue
+                    val file = File(path)
+                    if (file.exists()) result.add(FileItem(file))
+                }
+            }
+        } catch (e: Exception) { /* ignore */ }
+        return result
     }
 
-    suspend fun deleteFiles(files: List<FileItem>): Boolean = withContext(Dispatchers.IO) {
-        files.all { item ->
-            try {
-                if (item.isDirectory) item.file.deleteRecursively()
-                else item.file.delete()
-            } catch (e: Exception) { false }
-        }
+    suspend fun moveToTrash(files: List<FileItem>): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val trashDir = File(context.getExternalFilesDir(null), ".trash")
+                .also { it.mkdirs() }
+            files.all { item ->
+                val dest = File(trashDir, "${System.currentTimeMillis()}_${item.name}")
+                item.file.renameTo(dest)
+            }
+        } catch (e: Exception) { false }
     }
 
     fun sortFiles(files: List<FileItem>, sortType: SortType): List<FileItem> {
         val (folders, regularFiles) = files.partition { it.isDirectory }
         val sortedFolders = when (sortType) {
-            SortType.NAME_ASC -> folders.sortedBy { it.name.lowercase() }
             SortType.NAME_DESC -> folders.sortedByDescending { it.name.lowercase() }
-            SortType.DATE_ASC -> folders.sortedBy { it.lastModified }
+            SortType.DATE_ASC  -> folders.sortedBy { it.lastModified }
             SortType.DATE_DESC -> folders.sortedByDescending { it.lastModified }
-            else -> folders.sortedBy { it.name.lowercase() }
+            else               -> folders.sortedBy { it.name.lowercase() }
         }
         val sortedFiles = when (sortType) {
-            SortType.NAME_ASC -> regularFiles.sortedBy { it.name.lowercase() }
+            SortType.NAME_ASC  -> regularFiles.sortedBy { it.name.lowercase() }
             SortType.NAME_DESC -> regularFiles.sortedByDescending { it.name.lowercase() }
-            SortType.SIZE_ASC -> regularFiles.sortedBy { it.size }
+            SortType.SIZE_ASC  -> regularFiles.sortedBy { it.size }
             SortType.SIZE_DESC -> regularFiles.sortedByDescending { it.size }
-            SortType.DATE_ASC -> regularFiles.sortedBy { it.lastModified }
+            SortType.DATE_ASC  -> regularFiles.sortedBy { it.lastModified }
             SortType.DATE_DESC -> regularFiles.sortedByDescending { it.lastModified }
-            SortType.TYPE -> regularFiles.sortedWith(compareBy({ it.extension }, { it.name.lowercase() }))
+            SortType.TYPE      -> regularFiles.sortedWith(compareBy({ it.extension }, { it.name.lowercase() }))
         }
         return sortedFolders + sortedFiles
     }
 
-    fun getStorageRoot(): String =
-        Environment.getExternalStorageDirectory().absolutePath
+    fun getStorageRoot(): String = try {
+        Environment.getExternalStorageDirectory()?.absolutePath ?: "/sdcard"
+    } catch (e: Exception) { "/sdcard" }
 
-    fun getQuickAccessPaths(): List<Pair<String, String>> = listOf(
-        "Internal Storage" to Environment.getExternalStorageDirectory().absolutePath,
-        "Downloads" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
-        "DCIM" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).absolutePath,
-        "Pictures" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).absolutePath,
-        "Music" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).absolutePath,
-        "Movies" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).absolutePath,
-        "Documents" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath,
-    )
+    fun getQuickAccessPaths(): List<Pair<String, String>> = try {
+        listOf(
+            "Internal Storage" to (Environment.getExternalStorageDirectory()?.absolutePath ?: "/sdcard"),
+            "Downloads"  to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)?.absolutePath ?: "/sdcard/Download"),
+            "DCIM"       to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)?.absolutePath ?: "/sdcard/DCIM"),
+            "Pictures"   to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)?.absolutePath ?: "/sdcard/Pictures"),
+            "Music"      to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)?.absolutePath ?: "/sdcard/Music"),
+            "Movies"     to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)?.absolutePath ?: "/sdcard/Movies"),
+            "Documents"  to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)?.absolutePath ?: "/sdcard/Documents"),
+        )
+    } catch (e: Exception) {
+        listOf("Internal Storage" to "/sdcard")
+    }
 }
 
 enum class TimelineMediaType { IMAGES, VIDEOS, ALL }
