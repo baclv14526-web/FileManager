@@ -44,11 +44,8 @@ class MainActivity : AppCompatActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions.values.all { it }) {
-            viewModel.navigateTo(viewModel.getStorageRoot())
-        } else {
-            showPermissionDialog()
-        }
+        if (permissions.values.all { it }) onPermissionGranted()
+        else showPermissionDialog()
     }
 
     private val manageStorageLauncher = registerForActivityResult(
@@ -56,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
             Environment.isExternalStorageManager()) {
-            viewModel.navigateTo(viewModel.getStorageRoot())
+            onPermissionGranted()
         }
     }
 
@@ -71,7 +68,6 @@ class MainActivity : AppCompatActivity() {
         setupSidebar()
         setupObservers()
         setupBottomBar()
-        // FIX 1: Xin permission TRƯỚC, không làm gì khác trước đó
         checkPermissions()
     }
 
@@ -91,16 +87,91 @@ class MainActivity : AppCompatActivity() {
         binding.searchEditText.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val q = s?.toString() ?: ""
-                if (q.isEmpty()) viewModel.clearSearch()
-                else viewModel.search(q)
+                if (q.isEmpty()) {
+                    viewModel.clearSearch()
+                    binding.searchScopeBar.visibility = View.GONE
+                    binding.searchTypeBar.visibility  = View.GONE
+                    // Reset chip "Tất cả loại"
+                    binding.chipTypeAll.isChecked = true
+                } else {
+                    binding.searchScopeBar.visibility = View.VISIBLE
+                    binding.searchTypeBar.visibility  = View.VISIBLE
+                    viewModel.search(q)
+                }
             }
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
         })
+
         binding.btnClearSearch.setOnClickListener {
             binding.searchEditText.text?.clear()
+            binding.searchScopeBar.visibility = View.GONE
+            binding.searchTypeBar.visibility  = View.GONE
             viewModel.clearSearch()
         }
+
+        // Scope chips
+        binding.chipSearchCurrent.setOnClickListener  { viewModel.setSearchScope(SearchScope.CURRENT) }
+        binding.chipSearchInternal.setOnClickListener { viewModel.setSearchScope(SearchScope.INTERNAL) }
+        binding.chipSearchSD.setOnClickListener       { viewModel.setSearchScope(SearchScope.SD_CARD) }
+        binding.chipSearchAll.setOnClickListener      { viewModel.setSearchScope(SearchScope.ALL) }
+
+        // File type chips — "Tất cả loại" là toggle đặc biệt: bật nó thì tắt các chip kia
+        binding.chipTypeAll.setOnClickListener {
+            binding.chipTypeImage.isChecked   = false
+            binding.chipTypeVideo.isChecked   = false
+            binding.chipTypeAudio.isChecked   = false
+            binding.chipTypeDoc.isChecked     = false
+            binding.chipTypeArchive.isChecked = false
+            binding.chipTypeApk.isChecked     = false
+            binding.chipTypeFolder.isChecked  = false
+            binding.chipTypeAll.isChecked     = true
+            viewModel.setSearchFileType(SearchFileType.ALL)
+        }
+
+        fun onTypeChipToggle() {
+            // Nếu không chip nào được chọn → tự động check "Tất cả loại"
+            val anyChecked = listOf(
+                binding.chipTypeImage, binding.chipTypeVideo, binding.chipTypeAudio,
+                binding.chipTypeDoc, binding.chipTypeArchive, binding.chipTypeApk,
+                binding.chipTypeFolder
+            ).any { it.isChecked }
+
+            if (!anyChecked) {
+                binding.chipTypeAll.isChecked = true
+                viewModel.setSearchFileType(SearchFileType.ALL)
+                return
+            }
+            binding.chipTypeAll.isChecked = false
+
+            // Ưu tiên: nếu chọn 1 loại → filter đúng loại đó
+            // Nếu chọn nhiều loại → ALL (hiện tại chưa hỗ trợ multi-type, dùng ALL)
+            val checkedCount = listOf(
+                binding.chipTypeImage, binding.chipTypeVideo, binding.chipTypeAudio,
+                binding.chipTypeDoc, binding.chipTypeArchive, binding.chipTypeApk,
+                binding.chipTypeFolder
+            ).count { it.isChecked }
+
+            val type = if (checkedCount > 1) SearchFileType.ALL else when {
+                binding.chipTypeImage.isChecked   -> SearchFileType.IMAGE
+                binding.chipTypeVideo.isChecked   -> SearchFileType.VIDEO
+                binding.chipTypeAudio.isChecked   -> SearchFileType.AUDIO
+                binding.chipTypeDoc.isChecked     -> SearchFileType.DOCUMENT
+                binding.chipTypeArchive.isChecked -> SearchFileType.ARCHIVE
+                binding.chipTypeApk.isChecked     -> SearchFileType.APK
+                binding.chipTypeFolder.isChecked  -> SearchFileType.FOLDER
+                else -> SearchFileType.ALL
+            }
+            viewModel.setSearchFileType(type)
+        }
+
+        binding.chipTypeImage.setOnClickListener   { onTypeChipToggle() }
+        binding.chipTypeVideo.setOnClickListener   { onTypeChipToggle() }
+        binding.chipTypeAudio.setOnClickListener   { onTypeChipToggle() }
+        binding.chipTypeDoc.setOnClickListener     { onTypeChipToggle() }
+        binding.chipTypeArchive.setOnClickListener { onTypeChipToggle() }
+        binding.chipTypeApk.setOnClickListener     { onTypeChipToggle() }
+        binding.chipTypeFolder.setOnClickListener  { onTypeChipToggle() }
     }
 
     private fun setupSidebar() {
@@ -178,9 +249,40 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.isSelectionMode.observe(this) { selMode ->
             binding.bottomActionBar.visibility = if (selMode) View.VISIBLE else View.GONE
-            binding.searchBar.visibility    = if (selMode) View.GONE  else View.VISIBLE
-            binding.fabNewFolder.visibility = if (selMode) View.GONE  else View.VISIBLE
+            binding.searchBar.visibility       = if (selMode) View.GONE  else View.VISIBLE
+            binding.fabNewFolder.visibility    = if (selMode) View.GONE  else View.VISIBLE
+            if (selMode) {
+                binding.searchScopeBar.visibility = View.GONE
+                binding.searchTypeBar.visibility  = View.GONE
+                supportActionBar?.subtitle = null
+            }
             invalidateOptionsMenu()
+        }
+
+        // Cập nhật subtitle khi loại tìm kiếm thay đổi
+        viewModel.searchFileType.observe(this) { type ->
+            if (!binding.searchEditText.text.isNullOrEmpty()) {
+                val typeLabel = when (type) {
+                    SearchFileType.ALL      -> null
+                    SearchFileType.IMAGE    -> "Ảnh"
+                    SearchFileType.VIDEO    -> "Video"
+                    SearchFileType.AUDIO    -> "Âm thanh"
+                    SearchFileType.DOCUMENT -> "Tài liệu"
+                    SearchFileType.ARCHIVE  -> "File nén"
+                    SearchFileType.APK      -> "APK"
+                    SearchFileType.FOLDER   -> "Thư mục"
+                }
+                val scopeLabel = when (viewModel.searchScope.value) {
+                    SearchScope.CURRENT  -> "Thư mục hiện tại"
+                    SearchScope.INTERNAL -> "Bộ nhớ trong"
+                    SearchScope.SD_CARD  -> "Thẻ MicroSD"
+                    SearchScope.ALL      -> "Tất cả"
+                    null                 -> "Tất cả"
+                }
+                supportActionBar?.subtitle =
+                    if (typeLabel != null) "$typeLabel · $scopeLabel"
+                    else "Tìm trong: $scopeLabel"
+            }
         }
 
         viewModel.selectedFiles.observe(this) { selected ->
@@ -204,6 +306,26 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.toastMessage.observe(this) { msg ->
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Ẩn/hiện chip SD tùy theo có thẻ SD không
+        viewModel.hasSDCard.observe(this) { hasSD ->
+            binding.chipSearchSD.visibility = if (hasSD) View.VISIBLE else View.GONE
+        }
+
+        // Hiện kết quả search kèm thông tin scope
+        viewModel.searchScope.observe(this) { scope ->
+            val label = when (scope) {
+                SearchScope.CURRENT  -> "Thư mục hiện tại"
+                SearchScope.INTERNAL -> "Bộ nhớ trong"
+                SearchScope.SD_CARD  -> "Thẻ MicroSD"
+                SearchScope.ALL      -> "Tất cả bộ nhớ"
+            }
+            if (!binding.searchEditText.text.isNullOrEmpty()) {
+                supportActionBar?.subtitle = "Tìm trong: $label"
+            } else {
+                supportActionBar?.subtitle = null
+            }
         }
     }
 
@@ -366,33 +488,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkPermissions() {
         when {
-            // Android 11+ : MANAGE_EXTERNAL_STORAGE
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
                 if (!Environment.isExternalStorageManager()) showPermissionDialog()
-                else viewModel.navigateTo(viewModel.getStorageRoot())
+                else onPermissionGranted()
             }
-            // Android 6-10 : READ/WRITE runtime permission
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
                 val perms = mutableListOf<String>()
-                if (ContextCompat.checkSelfPermission(this,
-                        Manifest.permission.READ_EXTERNAL_STORAGE)
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED)
                     perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-                if (ContextCompat.checkSelfPermission(this,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED)
                     perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
 
-                if (perms.isEmpty()) {
-                    // FIX 3: Đã có permission rồi → navigate ngay, không hiện dialog
-                    viewModel.navigateTo(viewModel.getStorageRoot())
-                } else {
-                    permissionLauncher.launch(perms.toTypedArray())
-                }
+                if (perms.isEmpty()) onPermissionGranted()
+                else permissionLauncher.launch(perms.toTypedArray())
             }
-            // Android < 6 : không cần xin runtime
-            else -> viewModel.navigateTo(viewModel.getStorageRoot())
+            else -> onPermissionGranted()
         }
+    }
+
+    private fun onPermissionGranted() {
+        viewModel.init()                                    // detect SD card
+        viewModel.navigateTo(viewModel.getStorageRoot())   // load files
     }
 
     private fun showPermissionDialog() {

@@ -70,6 +70,134 @@
                     android:tint="?attr/colorOnSurfaceVariant"/>
             </LinearLayout>
 
+            <!-- Search scope chips — chỉ hiện khi đang tìm kiếm -->
+            <HorizontalScrollView
+                android:id="@+id/searchScopeBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="4dp"
+                android:background="?attr/colorPrimaryContainer"
+                android:visibility="gone">
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupSearchScope"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="true"
+                    app:selectionRequired="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSearchCurrent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Thư mục hiện tại"
+                        android:checked="true"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSearchInternal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📱 Bộ nhớ trong"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSearchSD"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="💾 Thẻ MicroSD"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:visibility="gone"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSearchAll"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 Tất cả"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
+            <!-- File type filter chips — chỉ hiện khi đang tìm kiếm -->
+            <HorizontalScrollView
+                android:id="@+id/searchTypeBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingHorizontal="12dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="6dp"
+                android:background="?attr/colorPrimaryContainer"
+                android:visibility="gone">
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupSearchType"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="false"
+                    app:selectionRequired="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeAll"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tất cả loại"
+                        android:checked="true"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeImage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🖼 Ảnh"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeVideo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎬 Video"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeAudio"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎵 Âm thanh"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeDoc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📄 Tài liệu"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeArchive"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🗜 Nén"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeApk"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📦 APK"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipTypeFolder"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📁 Thư mục"
+                        style="@style/Widget.Material3.Chip.Filter"/>
+
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
             <!-- Path breadcrumb -->
             <HorizontalScrollView
                 android:layout_width="match_parent"

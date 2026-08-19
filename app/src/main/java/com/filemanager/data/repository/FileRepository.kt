@@ -29,9 +29,11 @@ class FileRepository(private val context: Context) {
     suspend fun searchFiles(query: String, rootPath: String): List<FileItem> =
         withContext(Dispatchers.IO) {
             try {
+                val dir = File(rootPath)
+                if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
                 val results = mutableListOf<FileItem>()
-                searchRecursive(File(rootPath), query.lowercase(), results)
-                results.sortedBy { it.name.lowercase() }
+                searchRecursive(dir, query.lowercase(), results)
+                results
             } catch (e: Exception) {
                 emptyList()
             }
