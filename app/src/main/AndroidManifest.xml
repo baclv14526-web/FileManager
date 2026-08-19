@@ -46,7 +46,8 @@
             android:name=".ui.viewer.VideoPlayerActivity"
             android:exported="false"
             android:theme="@style/Theme.FileManager.Dark"
-            android:configChanges="orientation|screenSize|keyboardHidden"/>
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"/>
 
         <activity
             android:name=".ui.timeline.TimelineActivity"
