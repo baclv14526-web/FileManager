@@ -191,6 +191,10 @@ class MainActivity : AppCompatActivity() {
             binding.drawerLayout.closeDrawers()
             startActivity(Intent(this, TrashActivity::class.java))
         }
+        binding.btnCleanup.setOnClickListener {
+            binding.drawerLayout.closeDrawers()
+            startActivity(Intent(this, com.filemanager.ui.cleanup.CleanupActivity::class.java))
+        }
         binding.btnMenuToggle.setOnClickListener {
             binding.drawerLayout.openDrawer(binding.navDrawer)
         }

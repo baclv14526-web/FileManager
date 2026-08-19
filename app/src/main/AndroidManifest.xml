@@ -53,6 +53,10 @@
             android:exported="false"/>
 
         <activity
+            android:name=".ui.cleanup.CleanupActivity"
+            android:exported="false"/>
+
+        <activity
             android:name=".ui.main.TrashActivity"
             android:exported="false"/>
 

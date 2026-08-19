@@ -394,6 +394,40 @@
                 android:layout_marginStart="16dp"/>
         </LinearLayout>
 
+        <!-- Cleanup button -->
+        <LinearLayout
+            android:id="@+id/btnCleanup"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_cleanup"
+                android:tint="#FF6D00"/>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Dọn dẹp"
+                    android:textSize="15sp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="File lớn, rỗng, rác"
+                    android:textSize="11sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"/>
+            </LinearLayout>
+        </LinearLayout>
+
         <View android:layout_width="match_parent" android:layout_height="1dp"
             android:background="?attr/colorOutlineVariant" android:layout_marginVertical="8dp"/>
 
