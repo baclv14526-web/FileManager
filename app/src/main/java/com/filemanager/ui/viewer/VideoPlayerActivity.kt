@@ -32,8 +32,17 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var currentPosition = 0L
     private var path = ""
 
-    // Zoom state
-    private var isZoomed = false
+    // Zoom state — 5 levels tuần tự
+    enum class ZoomMode(val label: String, val scale: Float) {
+        FIT   ("FIT",  1.0f),   // vừa màn hình, có letterbox
+        FULL  ("100%", 1.0f),   // 100% không scale thêm (dùng RESIZE_MODE_ZOOM)
+        Z150  ("150%", 1.5f),   // zoom 150%
+        Z200  ("200%", 2.0f),   // zoom 200%
+        CROP  ("CROP", 1.0f);   // fill toàn màn hình, crop 2 cạnh
+
+        fun next() = values()[(ordinal + 1) % values().size]
+    }
+    private var zoomMode = ZoomMode.FIT
 
     // QX Controller
     private var qxController: QxSpeedController? = null
@@ -68,25 +77,50 @@ class VideoPlayerActivity : AppCompatActivity() {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
 
-        // Zoom FIT ↔ CROP (giữ tỉ lệ gốc)
+        // Zoom: tuần tự FIT → 100% → 150% → 200% → CROP → FIT → ...
         binding.btnZoom.setOnClickListener {
-            isZoomed = !isZoomed
-            applyResizeMode()
-            binding.btnZoom.setImageResource(
-                if (isZoomed) R.drawable.ic_zoom_out else R.drawable.ic_zoom_in
-            )
+            zoomMode = zoomMode.next()
+            applyZoom()
         }
 
         // QX Speed toggle
         binding.btnQx.setOnClickListener { toggleQx() }
     }
 
-    private fun applyResizeMode() {
-        binding.playerView.resizeMode =
-            if (isZoomed)
-                androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            else
-                androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+    private fun applyZoom() {
+        val pv = binding.playerView
+        when (zoomMode) {
+            ZoomMode.FIT -> {
+                // Vừa màn hình, letterbox, không scale
+                pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                pv.scaleX = 1f; pv.scaleY = 1f
+            }
+            ZoomMode.FULL -> {
+                // Fill màn hình crop 2 cạnh, scale = 1 (ZOOM mode tự fill)
+                pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                pv.scaleX = 1f; pv.scaleY = 1f
+            }
+            ZoomMode.Z150 -> {
+                // Crop fill + scale thêm 1.5x
+                pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                pv.scaleX = 1.5f; pv.scaleY = 1.5f
+            }
+            ZoomMode.Z200 -> {
+                // Crop fill + scale thêm 2.0x
+                pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                pv.scaleX = 2.0f; pv.scaleY = 2.0f
+            }
+            ZoomMode.CROP -> {
+                // Giống FULL nhưng dùng RESIZE_MODE_FIXED_WIDTH để fill chiều ngang
+                pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+                pv.scaleX = 1f; pv.scaleY = 1f
+            }
+        }
+        // Cập nhật icon và label
+        binding.tvZoomLabel.text = zoomMode.label
+        binding.btnZoom.setImageResource(
+            if (zoomMode == ZoomMode.FIT) R.drawable.ic_zoom_in else R.drawable.ic_zoom_out
+        )
     }
 
     // ── QX ──────────────────────────────────────────────────────
@@ -157,8 +191,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun initPlayer() {
         player = ExoPlayer.Builder(this).build().also { exo ->
             binding.playerView.player = exo
-            binding.playerView.resizeMode =
-                androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+            applyZoom()  // áp dụng zoom mode hiện tại
 
             exo.addListener(object : Player.Listener {
                 override fun onVideoSizeChanged(size: VideoSize) {
