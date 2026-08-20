@@ -10,6 +10,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -17,6 +18,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.filemanager.R
 import com.filemanager.databinding.ActivityVideoPlayerBinding
 import java.io.File
+import java.util.Locale
 
 class VideoPlayerActivity : AppCompatActivity() {
 
@@ -30,8 +32,12 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var currentPosition = 0L
     private var path = ""
 
-    // Trạng thái zoom: FIT (vừa màn hình) ↔ ZOOM (crop full)
+    // Zoom state
     private var isZoomed = false
+
+    // QX Controller
+    private var qxController: QxSpeedController? = null
+    private var isQxActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,21 +54,21 @@ class VideoPlayerActivity : AppCompatActivity() {
         initPlayer()
     }
 
+    // ── Setup ───────────────────────────────────────────────────
+
     private fun setupButtons() {
         binding.btnBack.setOnClickListener { finish() }
 
-        // Nút xoay màn hình
+        // Xoay màn hình thủ công
         binding.btnRotate.setOnClickListener {
-            requestedOrientation = if (resources.configuration.orientation
-                == Configuration.ORIENTATION_LANDSCAPE
-            ) {
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            }
+            requestedOrientation =
+                if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                else
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
 
-        // Nút zoom: FIT ↔ CROP (giữ tỉ lệ gốc, chỉ thay đổi cách fill)
+        // Zoom FIT ↔ CROP (giữ tỉ lệ gốc)
         binding.btnZoom.setOnClickListener {
             isZoomed = !isZoomed
             applyResizeMode()
@@ -70,32 +76,98 @@ class VideoPlayerActivity : AppCompatActivity() {
                 if (isZoomed) R.drawable.ic_zoom_out else R.drawable.ic_zoom_in
             )
         }
+
+        // QX Speed toggle
+        binding.btnQx.setOnClickListener { toggleQx() }
     }
 
     private fun applyResizeMode() {
-        // RESIZE_MODE_FIT  = vừa vặn, có viền đen, giữ tỉ lệ gốc  ✅
-        // RESIZE_MODE_ZOOM = fill màn hình, crop 2 cạnh, giữ tỉ lệ gốc ✅
-        // RESIZE_MODE_FILL = kéo giãn, PHÁ tỉ lệ gốc ❌ — KHÔNG dùng
-        binding.playerView.resizeMode = if (isZoomed)
-            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-        else
-            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+        binding.playerView.resizeMode =
+            if (isZoomed)
+                androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else
+                androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
     }
+
+    // ── QX ──────────────────────────────────────────────────────
+
+    private fun toggleQx() {
+        isQxActive = !isQxActive
+        val p = player ?: return
+
+        if (isQxActive) {
+            binding.btnQx.setImageResource(R.drawable.ic_qx_on)
+            binding.qxPanel.visibility = View.VISIBLE
+
+            qxController = QxSpeedController(
+                player            = p,
+                cycleDurationMs   = 30_000L,   // 1 chu kỳ = 30 giây thực
+                tickIntervalMs    = 80L,        // cập nhật 12.5 lần/giây → mượt
+                onSpeedChanged    = { speed, phase ->
+                    runOnUiThread { updateQxUI(speed, phase) }
+                }
+            )
+            qxController?.start(lifecycleScope)
+        } else {
+            stopQx()
+        }
+    }
+
+    private fun stopQx() {
+        isQxActive = false
+        qxController?.stop()
+        qxController = null
+        binding.btnQx.setImageResource(R.drawable.ic_qx_off)
+        binding.qxPanel.visibility = View.GONE
+        binding.tvQxSpeed.text = "1.0x"
+    }
+
+    private fun updateQxUI(speed: Float, phase: Float) {
+        binding.tvQxSpeed.text = String.format(Locale.US, "%.2fx", speed)
+
+        // Progress bar thể hiện vị trí trong chu kỳ (0..1)
+        binding.qxProgress.progress = (phase * 1000).toInt()
+
+        // Màu chỉ thị tốc độ:
+        //   2x   → đỏ cam  (#FF5722)
+        //   1x   → trắng
+        //   0.5x → xanh lam (#29B6F6)
+        val color = when {
+            speed > 1.3f -> interpolateColor(0xFFFFFFFF.toInt(), 0xFFFF5722.toInt(), (speed - 1f) / 1f)
+            speed < 0.8f -> interpolateColor(0xFFFFFFFF.toInt(), 0xFF29B6F6.toInt(), (1f - speed) / 0.5f)
+            else         -> 0xFFFFFFFF.toInt()
+        }
+        binding.tvQxSpeed.setTextColor(color)
+    }
+
+    private fun interpolateColor(from: Int, to: Int, ratio: Float): Int {
+        val r = ratio.coerceIn(0f, 1f)
+        val aF = (from shr 24) and 0xFF; val aT = (to shr 24) and 0xFF
+        val rF = (from shr 16) and 0xFF; val rT = (to shr 16) and 0xFF
+        val gF = (from shr 8)  and 0xFF; val gT = (to shr 8)  and 0xFF
+        val bF =  from         and 0xFF; val bT =  to         and 0xFF
+        return ((aF + (aT - aF) * r).toInt() shl 24) or
+               ((rF + (rT - rF) * r).toInt() shl 16) or
+               ((gF + (gT - gF) * r).toInt() shl 8)  or
+                (bF + (bT - bF) * r).toInt()
+    }
+
+    // ── Player ──────────────────────────────────────────────────
 
     private fun initPlayer() {
         player = ExoPlayer.Builder(this).build().also { exo ->
             binding.playerView.player = exo
-
-            // Mặc định FIT — giữ tỉ lệ gốc, không crop
             binding.playerView.resizeMode =
                 androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
 
             exo.addListener(object : Player.Listener {
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    // Tự động xoay màn hình theo chiều video khi mới mở
-                    if (videoSize.width > 0 && videoSize.height > 0) {
-                        autoRotateByVideoSize(videoSize.width, videoSize.height)
-                    }
+                override fun onVideoSizeChanged(size: VideoSize) {
+                    if (size.width > 0 && size.height > 0)
+                        autoRotateByVideoSize(size.width, size.height)
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    // Dừng QX khi video kết thúc
+                    if (state == Player.STATE_ENDED && isQxActive) stopQx()
                 }
             })
 
@@ -104,18 +176,21 @@ class VideoPlayerActivity : AppCompatActivity() {
             exo.seekTo(currentPosition)
             exo.prepare()
         }
+
+        // Khởi động lại QX nếu đang bật
+        if (isQxActive) {
+            qxController = QxSpeedController(
+                player = player!!,
+                onSpeedChanged = { speed, phase ->
+                    runOnUiThread { updateQxUI(speed, phase) }
+                }
+            )
+            qxController?.start(lifecycleScope)
+        }
     }
 
-    /**
-     * Tự động xoay màn hình theo chiều video:
-     * - Video ngang (width > height) → landscape
-     * - Video dọc (height >= width)  → portrait
-     * Chỉ xoay 1 lần khi video mới load (không override lựa chọn tay của người dùng)
-     */
     private fun autoRotateByVideoSize(width: Int, height: Int) {
-        // Nếu người dùng đã chủ động xoay thủ công → không ghi đè
         if (requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) return
-
         requestedOrientation = if (width > height)
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else
@@ -133,10 +208,11 @@ class VideoPlayerActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         player?.let {
-            playWhenReady    = it.playWhenReady
-            currentPosition  = it.currentPosition
+            playWhenReady   = it.playWhenReady
+            currentPosition = it.currentPosition
             it.pause()
         }
+        qxController?.stop()
     }
 
     override fun onStop() {
@@ -145,6 +221,8 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun releasePlayer() {
+        qxController?.stop()
+        qxController = null
         player?.let {
             playWhenReady   = it.playWhenReady
             currentPosition = it.currentPosition
@@ -165,14 +243,13 @@ class VideoPlayerActivity : AppCompatActivity() {
         } else {
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             )
         }
     }
 }
-

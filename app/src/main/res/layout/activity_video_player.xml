@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- PlayerView chiếm toàn màn hình -->
+    <!-- PlayerView fullscreen -->
     <androidx.media3.ui.PlayerView
         android:id="@+id/playerView"
         android:layout_width="0dp"
@@ -19,7 +19,7 @@
         app:show_timeout="3000"
         app:resize_mode="fit"/>
 
-    <!-- Top bar: back + title + rotate + zoom -->
+    <!-- ── Top bar ────────────────────────────────────────────── -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -35,7 +35,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Nút back -->
         <ImageButton
             android:id="@+id/btnBack"
             android:layout_width="44dp"
@@ -44,7 +43,6 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Quay lại"/>
 
-        <!-- Tên file -->
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="0dp"
@@ -56,7 +54,17 @@
             android:ellipsize="middle"
             android:layout_marginHorizontal="8dp"/>
 
-        <!-- Nút zoom: FIT ↔ CROP -->
+        <!-- QX Speed button -->
+        <ImageButton
+            android:id="@+id/btnQx"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_qx_off"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="QX Speed"
+            android:layout_marginEnd="2dp"/>
+
+        <!-- Zoom button -->
         <ImageButton
             android:id="@+id/btnZoom"
             android:layout_width="40dp"
@@ -64,9 +72,9 @@
             android:src="@drawable/ic_zoom_in"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Zoom"
-            android:layout_marginEnd="4dp"/>
+            android:layout_marginEnd="2dp"/>
 
-        <!-- Nút xoay màn hình -->
+        <!-- Rotate button -->
         <ImageButton
             android:id="@+id/btnRotate"
             android:layout_width="40dp"
@@ -74,7 +82,131 @@
             android:src="@drawable/ic_screen_rotation"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Xoay màn hình"/>
+    </LinearLayout>
 
+    <!-- ── QX Info Panel ──────────────────────────────────────── -->
+    <!--
+        Hiện khi QX đang bật:
+        - Tốc độ hiện tại (màu đổi theo: cam=nhanh, trắng=1x, xanh=chậm)
+        - Progress bar thể hiện vị trí trong chu kỳ 2x→1x→0.5x→1x→2x
+        - Chú thích keyframe
+    -->
+    <LinearLayout
+        android:id="@+id/qxPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#CC000000"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Dòng 1: label QX + tốc độ hiện tại -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="QX"
+                android:textColor="#FF9800"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="#33FF9800"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:layout_marginEnd="10dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tốc độ:"
+                android:textColor="#AAFFFFFF"
+                android:textSize="12sp"
+                android:layout_marginEnd="6dp"/>
+
+            <TextView
+                android:id="@+id/tvQxSpeed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2.00x"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:layout_marginEnd="12dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Chu kỳ: 30s"
+                android:textColor="#66FFFFFF"
+                android:textSize="11sp"/>
+        </LinearLayout>
+
+        <!-- Dòng 2: Progress bar chu kỳ + keyframe labels -->
+        <ProgressBar
+            android:id="@+id/qxProgress"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:max="1000"
+            android:progress="0"
+            style="@style/Widget.Material3.LinearProgressIndicator"
+            android:layout_marginBottom="4dp"/>
+
+        <!-- Keyframe markers -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="2x"
+                android:textColor="#FF5722"
+                android:textSize="10sp"
+                android:gravity="start"/>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1x"
+                android:textColor="#AAFFFFFF"
+                android:textSize="10sp"
+                android:gravity="center"/>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0.5x"
+                android:textColor="#29B6F6"
+                android:textSize="10sp"
+                android:gravity="center"/>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1x"
+                android:textColor="#AAFFFFFF"
+                android:textSize="10sp"
+                android:gravity="center"/>
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="2x"
+                android:textColor="#FF5722"
+                android:textSize="10sp"
+                android:gravity="end"/>
+        </LinearLayout>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
