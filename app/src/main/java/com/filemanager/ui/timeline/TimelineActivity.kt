@@ -10,6 +10,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.filemanager.data.model.FileItem
 import com.filemanager.data.model.FileType
 import com.filemanager.data.repository.TimelineMediaType
+import com.filemanager.utils.LoadingHelper
+import com.filemanager.utils.ShimmerType
 import com.filemanager.databinding.ActivityTimelineBinding
 import com.filemanager.ui.viewer.ImageViewerActivity
 import com.filemanager.ui.viewer.VideoPlayerActivity
@@ -85,6 +87,11 @@ class TimelineActivity : AppCompatActivity() {
 
         viewModel.isLoading.observe(this) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+            if (loading) {
+                LoadingHelper.showShimmer(binding.recyclerView, ShimmerType.MEDIA, 12)
+            } else {
+                LoadingHelper.hideShimmer(binding.recyclerView)
+            }
         }
 
         // Quan sát danh sách volumes để update UI

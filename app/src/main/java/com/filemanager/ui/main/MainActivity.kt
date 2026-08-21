@@ -32,6 +32,8 @@ import com.filemanager.ui.timeline.TimelineActivity
 import com.filemanager.ui.viewer.ImageViewerActivity
 import com.filemanager.ui.viewer.VideoPlayerActivity
 import com.filemanager.utils.FileUtils
+import com.filemanager.utils.LoadingHelper
+import com.filemanager.utils.ShimmerType
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 
@@ -248,7 +250,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.isLoading.observe(this) { loading ->
-            binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+            val query = binding.searchEditText.text?.toString() ?: ""
+            if (loading) {
+                binding.progressBar.visibility = View.VISIBLE
+                val shimType = if (viewModel.isGridView.value == true)
+                    ShimmerType.GRID else ShimmerType.LIST
+                LoadingHelper.showShimmer(binding.recyclerView, shimType, 10)
+            } else {
+                binding.progressBar.visibility = View.GONE
+                LoadingHelper.hideShimmer(binding.recyclerView)
+            }
         }
 
         viewModel.isSelectionMode.observe(this) { selMode ->
@@ -309,6 +320,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.toastMessage.observe(this) { msg ->
+            LoadingHelper.hideOverlay(this)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
@@ -341,7 +353,10 @@ class MainActivity : AppCompatActivity() {
             MaterialAlertDialogBuilder(this)
                 .setTitle("Xóa vào thùng rác")
                 .setMessage("Chuyển ${items.size} mục vào thùng rác?")
-                .setPositiveButton("Xóa") { _, _ -> viewModel.moveSelectedToTrash() }
+                .setPositiveButton("Xóa") { _, _ ->
+                    LoadingHelper.showOverlay(this, "Đang xóa...", "${items.size} mục")
+                    viewModel.moveSelectedToTrash()
+                }
                 .setNegativeButton("Hủy", null)
                 .show()
         }

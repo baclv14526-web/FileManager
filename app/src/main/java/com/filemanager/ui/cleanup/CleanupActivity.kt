@@ -1,6 +1,7 @@
 package com.filemanager.ui.cleanup
 
 import android.os.Bundle
+import com.filemanager.utils.LoadingHelper
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
@@ -117,13 +118,26 @@ class CleanupActivity : AppCompatActivity() {
         // Scan progress / summary text
         viewModel.scanProgress.observe(this) { msg ->
             binding.tvSummary.text = msg
+            // Update overlay message nếu đang quét
+            if (viewModel.isScanning.value == true) {
+                LoadingHelper.updateOverlayMessage(this, "Đang quét...", msg)
+            }
         }
 
         // Đang quét
         viewModel.isScanning.observe(this) { scanning ->
-            binding.scanningView.visibility = if (scanning) View.VISIBLE else View.GONE
+            binding.scanningView.visibility = View.GONE   // dùng overlay thay
             binding.btnScan.isEnabled       = !scanning
             binding.btnScan.text            = if (scanning) "Đang quét..." else "🔍  Bắt đầu quét"
+            if (scanning) {
+                LoadingHelper.showOverlay(
+                    this,
+                    message = "Đang quét bộ nhớ...",
+                    subMsg  = "Tìm file lớn, rỗng và rác"
+                )
+            } else {
+                LoadingHelper.hideOverlay(this)
+            }
         }
 
         // Selection stats → bottom bar

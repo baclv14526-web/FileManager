@@ -13,6 +13,7 @@ import com.filemanager.data.repository.FileRepository
 import com.filemanager.databinding.ActivityTrashBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import com.filemanager.utils.LoadingHelper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -77,6 +78,7 @@ class TrashActivity : AppCompatActivity() {
 
     private fun restoreSelected() {
         val toRestore = trashItems.filter { it.path in selectedPaths }
+        LoadingHelper.showOverlay(this, "Đang khôi phục...", "${toRestore.size} mục")
         lifecycleScope.launch(Dispatchers.IO) {
             toRestore.forEach { item ->
                 // Restore: remove the timestamp prefix and move back to original location
@@ -90,6 +92,7 @@ class TrashActivity : AppCompatActivity() {
                 item.file.renameTo(dest)
             }
             withContext(Dispatchers.Main) {
+                LoadingHelper.hideOverlay(this@TrashActivity)
                 selectedPaths.clear()
                 Toast.makeText(this@TrashActivity, "Đã khôi phục ${toRestore.size} mục", Toast.LENGTH_SHORT).show()
                 loadTrashFiles()
@@ -103,9 +106,11 @@ class TrashActivity : AppCompatActivity() {
             .setTitle("Xóa vĩnh viễn")
             .setMessage("Xóa vĩnh viễn ${toDelete.size} mục? Không thể hoàn tác.")
             .setPositiveButton("Xóa") { _, _ ->
+                LoadingHelper.showOverlay(this, "Đang xóa vĩnh viễn...")
                 lifecycleScope.launch(Dispatchers.IO) {
                     toDelete.forEach { it.file.delete() }
                     withContext(Dispatchers.Main) {
+                        LoadingHelper.hideOverlay(this@TrashActivity)
                         selectedPaths.clear()
                         Toast.makeText(this@TrashActivity, "Đã xóa vĩnh viễn", Toast.LENGTH_SHORT).show()
                         loadTrashFiles()
