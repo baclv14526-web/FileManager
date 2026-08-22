@@ -11,6 +11,7 @@ import com.filemanager.data.model.FileItem
 import com.filemanager.data.model.FileType
 import com.filemanager.data.repository.TimelineMediaType
 import com.filemanager.utils.LoadingHelper
+import com.filemanager.utils.FastScroller
 import com.filemanager.utils.ShimmerType
 import com.filemanager.databinding.ActivityTimelineBinding
 import com.filemanager.ui.viewer.ImageViewerActivity
@@ -55,6 +56,7 @@ class TimelineActivity : AppCompatActivity() {
         }
         binding.recyclerView.layoutManager = glm
         binding.recyclerView.adapter = adapter
+        binding.fastScroller.attachToRecyclerView(binding.recyclerView)
     }
 
     private fun setupScopeChips() {
@@ -83,6 +85,13 @@ class TimelineActivity : AppCompatActivity() {
         viewModel.timelineItems.observe(this) { items ->
             adapter.submitList(items)
             binding.emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            // Tạo labels cho FastScroller: vị trí header → tên tháng
+            val labels = items.mapIndexedNotNull { idx, item ->
+                if (item is TimelineListItem.Header)
+                    idx to item.title.take(8) // "Tháng 8" ngắn gọn
+                else null
+            }
+            binding.fastScroller.setTimelineLabels(labels, items.size)
         }
 
         viewModel.isLoading.observe(this) { loading ->

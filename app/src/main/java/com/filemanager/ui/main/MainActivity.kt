@@ -32,6 +32,7 @@ import com.filemanager.ui.timeline.TimelineActivity
 import com.filemanager.ui.viewer.ImageViewerActivity
 import com.filemanager.ui.viewer.VideoPlayerActivity
 import com.filemanager.utils.FileUtils
+import com.filemanager.utils.FastScroller
 import com.filemanager.utils.LoadingHelper
 import com.filemanager.utils.ShimmerType
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -83,6 +84,8 @@ class MainActivity : AppCompatActivity() {
             adapter = fileAdapter
             layoutManager = LinearLayoutManager(this@MainActivity)
         }
+        // Attach FastScroller
+        binding.fastScroller.attachToRecyclerView(binding.recyclerView)
     }
 
     private fun setupSearch() {
@@ -230,6 +233,8 @@ class MainActivity : AppCompatActivity() {
                 fileAdapter.submitList(files)
                 binding.emptyView.visibility =
                     if (files.isEmpty()) View.VISIBLE else View.GONE
+                // Cập nhật FastScroller với danh sách mới
+                binding.fastScroller.setItems(files)
             }
         }
 
@@ -240,6 +245,8 @@ class MainActivity : AppCompatActivity() {
                     if (results.isEmpty()) View.VISIBLE else View.GONE
                 binding.emptyText.text =
                     if (results.isEmpty()) "Không tìm thấy kết quả" else ""
+                // Cập nhật FastScroller
+                binding.fastScroller.setItems(results)
             }
         }
 
@@ -266,6 +273,7 @@ class MainActivity : AppCompatActivity() {
             binding.bottomActionBar.visibility = if (selMode) View.VISIBLE else View.GONE
             binding.searchBar.visibility       = if (selMode) View.GONE  else View.VISIBLE
             binding.fabNewFolder.visibility    = if (selMode) View.GONE  else View.VISIBLE
+            binding.fastScroller.visibility    = if (selMode) View.GONE  else View.VISIBLE
             if (selMode) {
                 binding.searchScopeBar.visibility = View.GONE
                 binding.searchTypeBar.visibility  = View.GONE

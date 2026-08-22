@@ -225,13 +225,29 @@
             app:layout_anchorGravity="bottom"
             android:visibility="gone"/>
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerView"
+        <!-- FrameLayout để FastScroller overlay lên RecyclerView -->
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            app:layout_behavior="@string/appbar_scrolling_view_behavior"
-            android:clipToPadding="false"
-            android:paddingBottom="80dp"/>
+            app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="80dp"
+                android:paddingEnd="20dp"/>
+
+            <!-- FastScroller: thanh cuộn nhanh bên phải -->
+            <com.filemanager.utils.FastScroller
+                android:id="@+id/fastScroller"
+                android:layout_width="40dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="end"
+                android:alpha="0"/>
+
+        </FrameLayout>
 
         <!-- Empty view -->
         <LinearLayout
