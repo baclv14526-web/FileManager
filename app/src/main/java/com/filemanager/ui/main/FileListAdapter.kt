@@ -3,6 +3,7 @@ package com.filemanager.ui.main
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.recyclerview.widget.AdapterListUpdateCallback
 import androidx.recyclerview.widget.AsyncDifferConfig
 import androidx.recyclerview.widget.AsyncListDiffer
 import androidx.recyclerview.widget.DiffUtil
@@ -61,8 +62,10 @@ class FileListAdapter(
 
     // ✅ AsyncListDiffer với executor riêng — không dùng shared ForkJoin pool
     private val bgExecutor = Executors.newSingleThreadExecutor()
+
+    init { setHasStableIds(true) }
     private val differ = AsyncListDiffer(
-        this,
+        AdapterListUpdateCallback(this),    // Fix: cần AdapterListUpdateCallback, không phải this
         AsyncDifferConfig.Builder(DIFF_CALLBACK)
             .setBackgroundThreadExecutor(bgExecutor)
             .build()
@@ -224,7 +227,7 @@ class FileListAdapter(
 
     // ── Helpers ──────────────────────────────────────────────────
 
-    private fun isSelectionMode() = differ.currentList.any { it.isSelected }
+    private fun isSelectionMode() = differ.currentList.any { item -> item.isSelected }
 
     private fun iconRes(type: FileType, isDir: Boolean) = when {
         isDir                   -> R.drawable.ic_folder
