@@ -24,15 +24,32 @@ class CleanupAdapter(
         const val TYPE_ENTRY  = 1
 
         val DIFF = object : DiffUtil.ItemCallback<CleanupListItem>() {
-            override fun areItemsTheSame(a: CleanupListItem, b: CleanupListItem): Boolean =
-                when {
-                    a is CleanupListItem.Header && b is CleanupListItem.Header ->
-                        a.category == b.category
-                    a is CleanupListItem.Entry && b is CleanupListItem.Entry ->
-                        a.item.fileItem.path == b.item.fileItem.path
-                    else -> false
-                }
-            override fun areContentsTheSame(a: CleanupListItem, b: CleanupListItem) = a == b
+            override fun areItemsTheSame(a: CleanupListItem, b: CleanupListItem) = when {
+                a is CleanupListItem.Header && b is CleanupListItem.Header ->
+                    a.category == b.category && a.count == b.count   // count âm = "more" placeholder
+                a is CleanupListItem.Entry  && b is CleanupListItem.Entry  ->
+                    a.item.fileItem.path == b.item.fileItem.path
+                else -> false
+            }
+            override fun areContentsTheSame(a: CleanupListItem, b: CleanupListItem): Boolean {
+                if (a is CleanupListItem.Header && b is CleanupListItem.Header)
+                    return a.isExpanded == b.isExpanded &&
+                           a.count     == b.count      &&
+                           a.totalSize == b.totalSize
+                if (a is CleanupListItem.Entry && b is CleanupListItem.Entry)
+                    return a.item.isSelected == b.item.isSelected
+                return false
+            }
+        }
+    }
+
+    // ✅ stableIds → DiffUtil nhanh hơn
+    init { setHasStableIds(true) }
+
+    override fun getItemId(position: Int): Long {
+        return when (val item = getItem(position)) {
+            is CleanupListItem.Header -> item.category.ordinal.toLong() * -1 - 1
+            is CleanupListItem.Entry  -> item.item.fileItem.path.hashCode().toLong()
         }
     }
 
@@ -58,74 +75,95 @@ class CleanupAdapter(
         }
     }
 
-    // ── Header ViewHolder ───────────────────────────────────────
+    // ✅ Clear Glide khi recycle để tránh memory leak
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        super.onViewRecycled(holder)
+        if (holder is EntryVH) {
+            Glide.with(holder.itemView).clear(holder.binding.ivIcon)
+        }
+    }
+
+    // ── Header VH ───────────────────────────────────────────────
 
     inner class HeaderVH(private val b: ItemCleanupHeaderBinding) :
         RecyclerView.ViewHolder(b.root) {
 
         fun bind(h: CleanupListItem.Header) {
+            // count âm = placeholder "... và N mục khác"
+            if (h.count < 0) {
+                b.tvIcon.text         = "➕"
+                b.tvCategoryName.text = "... và ${-h.count} mục khác"
+                b.tvCategoryInfo.text = "(chạm để xem tất cả)"
+                b.cbSelectAll.visibility = View.GONE
+                b.ivChevron.visibility   = View.GONE
+                b.root.setOnClickListener { onHeaderClick(h.category) }
+                return
+            }
+
             b.tvIcon.text         = h.category.icon
             b.tvCategoryName.text = h.category.label
-            b.tvCategoryInfo.text = "${h.count} mục · ${FileUtils.formatSize(h.totalSize)}"
 
+            // Mô tả: số lượng + dung lượng (nếu có)
+            val sizeStr = if (h.totalSize > 0) " · ${FileUtils.formatSize(h.totalSize)}" else ""
+            b.tvCategoryInfo.text = "${h.count} mục$sizeStr"
+
+            // Chevron theo trạng thái expanded/collapsed
             b.ivChevron.setImageResource(
                 if (h.isExpanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right
             )
+            b.ivChevron.visibility   = View.VISIBLE
+            b.cbSelectAll.visibility = View.VISIBLE
 
-            // Checkbox chọn tất cả trong category
+            // Checkbox select-all trong category
             b.cbSelectAll.setOnCheckedChangeListener(null)
-            b.cbSelectAll.isChecked = false // reset trước
+            b.cbSelectAll.isChecked = false
             b.cbSelectAll.setOnCheckedChangeListener { _, checked ->
                 onCategoryToggleSelect(h.category, checked)
             }
 
-            // Tap header → collapse/expand
+            // Tap header → expand/collapse
             b.root.setOnClickListener { onHeaderClick(h.category) }
         }
     }
 
-    // ── Entry ViewHolder ────────────────────────────────────────
+    // ── Entry VH ────────────────────────────────────────────────
 
-    inner class EntryVH(private val b: ItemCleanupEntryBinding) :
-        RecyclerView.ViewHolder(b.root) {
+    inner class EntryVH(val binding: ItemCleanupEntryBinding) :
+        RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: CleanupItem) {
             val file = item.fileItem
-            b.tvName.text = file.name
-            b.tvPath.text = file.file.parent ?: file.path
-            b.tvSize.text = if (file.size > 0) FileUtils.formatSize(file.size) else "0 B"
+            binding.tvName.text = file.name
+            binding.tvPath.text = file.file.parent ?: ""
+            binding.tvSize.text = if (file.size > 0) FileUtils.formatSize(file.size) else "0 B"
 
-            // Icon / thumbnail
+            // Icon — ảnh/video dùng Glide, còn lại dùng vector icon tĩnh
             when (file.fileType) {
-                FileType.IMAGE -> {
-                    Glide.with(b.root).load(file.file)
-                        .centerCrop().placeholder(R.drawable.ic_image).into(b.ivIcon)
-                }
-                FileType.VIDEO -> {
-                    Glide.with(b.root).load(file.file)
-                        .centerCrop().placeholder(R.drawable.ic_video).into(b.ivIcon)
-                }
+                FileType.IMAGE -> Glide.with(binding.root)
+                    .load(file.file).centerCrop()
+                    .placeholder(R.drawable.ic_image).into(binding.ivIcon)
+                FileType.VIDEO -> Glide.with(binding.root)
+                    .load(file.file).centerCrop()
+                    .placeholder(R.drawable.ic_video).into(binding.ivIcon)
                 else -> {
-                    Glide.with(b.root).clear(b.ivIcon)
-                    b.ivIcon.setImageResource(iconFor(file.fileType, file.isDirectory))
+                    Glide.with(binding.root).clear(binding.ivIcon)
+                    binding.ivIcon.setImageResource(iconRes(file.fileType, file.isDirectory))
                 }
             }
 
-            b.cbItem.setOnCheckedChangeListener(null)
-            b.cbItem.isChecked = item.isSelected
-            b.cbItem.setOnCheckedChangeListener { _, _ -> onItemToggle(item) }
-
-            b.root.setOnClickListener { onItemToggle(item) }
+            binding.cbItem.setOnCheckedChangeListener(null)
+            binding.cbItem.isChecked = item.isSelected
+            binding.cbItem.setOnCheckedChangeListener { _, _ -> onItemToggle(item) }
+            binding.root.setOnClickListener { onItemToggle(item) }
         }
 
-        private fun iconFor(type: FileType, isDir: Boolean) = when {
+        private fun iconRes(type: FileType, isDir: Boolean) = when {
             isDir               -> R.drawable.ic_folder
             type == FileType.VIDEO    -> R.drawable.ic_video
             type == FileType.AUDIO    -> R.drawable.ic_audio
             type == FileType.DOCUMENT -> R.drawable.ic_document
             type == FileType.ARCHIVE  -> R.drawable.ic_archive
             type == FileType.APK      -> R.drawable.ic_apk
-            type == FileType.CODE     -> R.drawable.ic_code
             else                -> R.drawable.ic_file
         }
     }

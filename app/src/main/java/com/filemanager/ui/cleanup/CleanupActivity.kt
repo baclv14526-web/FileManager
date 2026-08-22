@@ -51,6 +51,12 @@ class CleanupActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(this@CleanupActivity)
             adapter = this@CleanupActivity.adapter
             isNestedScrollingEnabled = false
+            // ✅ Cache ViewHolder để scroll mượt hơn
+            setItemViewCacheSize(20)
+            recycledViewPool.setMaxRecycledViews(CleanupAdapter.TYPE_ENTRY, 30)
+            recycledViewPool.setMaxRecycledViews(CleanupAdapter.TYPE_HEADER, 8)
+            // ✅ Kích thước cố định giúp tránh đo lại layout
+            setHasFixedSize(false)
         }
     }
 
