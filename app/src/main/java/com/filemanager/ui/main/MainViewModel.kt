@@ -11,15 +11,17 @@ import com.filemanager.data.model.FileType
 import com.filemanager.data.model.SortType
 import com.filemanager.data.repository.FileRepository
 import com.filemanager.utils.StorageHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SearchScope { CURRENT, INTERNAL, SD_CARD, ALL }
 
 enum class SearchFileType {
     ALL, IMAGE, VIDEO, AUDIO, DOCUMENT, ARCHIVE, APK, FOLDER;
-
-    fun matches(item: FileItem): Boolean = when (this) {
+    fun matches(item: FileItem) = when (this) {
         ALL      -> true
         IMAGE    -> item.fileType == FileType.IMAGE
         VIDEO    -> item.fileType == FileType.VIDEO
@@ -33,55 +35,54 @@ enum class SearchFileType {
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository  = FileRepository(app)
-    private val storageHelper = StorageHelper
+    private val repository = FileRepository(app)
 
-    private val _files          = MutableLiveData<List<FileItem>>(emptyList())
+    private val _files           = MutableLiveData<List<FileItem>>(emptyList())
     val files: LiveData<List<FileItem>> = _files
 
-    private val _currentPath    = MutableLiveData<String>("")
+    private val _currentPath     = MutableLiveData<String>("")
     val currentPath: LiveData<String> = _currentPath
 
-    private val _searchResults  = MutableLiveData<List<FileItem>?>()
+    private val _searchResults   = MutableLiveData<List<FileItem>?>()
     val searchResults: LiveData<List<FileItem>?> = _searchResults
 
-    private val _selectedFiles  = MutableLiveData<Set<String>>(emptySet())
+    private val _selectedFiles   = MutableLiveData<Set<String>>(emptySet())
     val selectedFiles: LiveData<Set<String>> = _selectedFiles
 
     private val _isSelectionMode = MutableLiveData(false)
     val isSelectionMode: LiveData<Boolean> = _isSelectionMode
 
-    private val _sortType       = MutableLiveData(SortType.NAME_ASC)
+    private val _sortType        = MutableLiveData(SortType.NAME_ASC)
     val sortType: LiveData<SortType> = _sortType
 
-    private val _isLoading      = MutableLiveData(false)
+    private val _isLoading       = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    private val _toastMessage   = MutableLiveData<String>()
+    private val _toastMessage    = MutableLiveData<String>()
     val toastMessage: LiveData<String> = _toastMessage
 
-    private val _isGridView     = MutableLiveData(false)
+    private val _isGridView      = MutableLiveData(false)
     val isGridView: LiveData<Boolean> = _isGridView
 
-    private val _hasSDCard      = MutableLiveData(false)
+    private val _hasSDCard       = MutableLiveData(false)
     val hasSDCard: LiveData<Boolean> = _hasSDCard
 
-    private val _searchScope    = MutableLiveData(SearchScope.CURRENT)
+    private val _searchScope     = MutableLiveData(SearchScope.CURRENT)
     val searchScope: LiveData<SearchScope> = _searchScope
 
-    private val _searchFileType = MutableLiveData(SearchFileType.ALL)
+    private val _searchFileType  = MutableLiveData(SearchFileType.ALL)
     val searchFileType: LiveData<SearchFileType> = _searchFileType
 
     val pathHistory = ArrayDeque<String>()
     private var searchJob: Job? = null
     private var lastQuery = ""
 
-    // Gọi sau khi có permission
+    // ── Init ────────────────────────────────────────────────────
+
     fun init() {
-        viewModelScope.launch {
-            // Detect SD card
-            val volumes = storageHelper.getStorageVolumes(getApplication())
-            _hasSDCard.value = volumes.any { it.isRemovable }
+        viewModelScope.launch(Dispatchers.IO) {
+            val vols = StorageHelper.getStorageVolumes(getApplication())
+            _hasSDCard.postValue(vols.any { it.isRemovable })
         }
     }
 
@@ -92,8 +93,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val current = _currentPath.value
             if (!current.isNullOrEmpty() && current != path) pathHistory.addLast(current)
             _currentPath.value = path
-            loadFiles(path)
             exitSelectionMode()
+            loadFiles(path)
         } catch (e: Exception) {
             _toastMessage.value = "Không thể mở: ${e.message}"
         }
@@ -103,8 +104,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (pathHistory.isEmpty()) return false
         val prev = pathHistory.removeLast()
         _currentPath.value = prev
-        loadFiles(prev)
         exitSelectionMode()
+        loadFiles(prev)
         return true
     }
 
@@ -112,7 +113,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                _files.value = repository.getFiles(path, _sortType.value ?: SortType.NAME_ASC)
+                // ✅ Toàn bộ IO + sort trên background thread
+                val result = withContext(Dispatchers.IO) {
+                    repository.getFiles(path, _sortType.value ?: SortType.NAME_ASC)
+                }
+                _files.value = result
             } catch (e: Exception) {
                 _files.value = emptyList()
                 _toastMessage.value = "Lỗi đọc thư mục: ${e.message}"
@@ -130,20 +135,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
+            // ✅ Debounce 250ms — tránh search mỗi ký tự gõ
+            delay(250)
             _isLoading.value = true
             try {
                 val roots    = getSearchRoots(_searchScope.value ?: SearchScope.CURRENT)
                 val fileType = _searchFileType.value ?: SearchFileType.ALL
-                val results  = mutableListOf<FileItem>()
 
-                roots.forEach { root ->
-                    results += repository.searchFiles(query, root)
+                val results = withContext(Dispatchers.IO) {
+                    val raw = mutableListOf<FileItem>()
+                    roots.forEach { root -> raw += repository.searchFiles(query, root) }
+                    raw.distinctBy { it.path }
+                        .filter { fileType.matches(it) }
+                        .sortedWith(compareBy({ it.fileType.ordinal }, { it.name.lowercase() }))
                 }
-
                 _searchResults.value = results
-                    .distinctBy { it.path }
-                    .filter { fileType.matches(it) }        // ← filter theo loại
-                    .sortedWith(compareBy({ it.fileType.ordinal }, { it.name.lowercase() }))
             } catch (e: Exception) {
                 _searchResults.value = emptyList()
             } finally {
@@ -162,34 +168,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (lastQuery.isNotBlank()) search(lastQuery)
     }
 
-    private fun getSearchRoots(scope: SearchScope): List<String> {
-        val volumes = try {
-            StorageHelper.getStorageVolumes(getApplication())
-        } catch (e: Exception) { emptyList() }
-
-        return when (scope) {
-            SearchScope.CURRENT  -> listOf(
-                _currentPath.value?.ifEmpty { getStorageRoot() } ?: getStorageRoot()
-            )
-            SearchScope.INTERNAL -> volumes
-                .filter { !it.isRemovable }
-                .map { it.path }
-                .ifEmpty { listOf(getStorageRoot()) }
-            SearchScope.SD_CARD  -> volumes
-                .filter { it.isRemovable }
-                .map { it.path }
-            SearchScope.ALL      -> {
-                val all = volumes.map { it.path }
-                all.ifEmpty { listOf(getStorageRoot()) }
-            }
-        }
-    }
-
     fun clearSearch() {
         lastQuery = ""
         searchJob?.cancel()
         _searchResults.value  = null
-        _searchFileType.value = SearchFileType.ALL  // reset về Tất cả
+        _searchFileType.value = SearchFileType.ALL
+    }
+
+    private fun getSearchRoots(scope: SearchScope): List<String> {
+        val volumes = try { StorageHelper.getStorageVolumes(getApplication()) }
+        catch (e: Exception) { emptyList() }
+        return when (scope) {
+            SearchScope.CURRENT  -> listOf(
+                _currentPath.value?.ifEmpty { getStorageRoot() } ?: getStorageRoot()
+            )
+            SearchScope.INTERNAL -> volumes.filter { !it.isRemovable }.map { it.path }
+                .ifEmpty { listOf(getStorageRoot()) }
+            SearchScope.SD_CARD  -> volumes.filter { it.isRemovable }.map { it.path }
+            SearchScope.ALL      -> volumes.map { it.path }.ifEmpty { listOf(getStorageRoot()) }
+        }
     }
 
     // ── Sort / View ─────────────────────────────────────────────
@@ -207,31 +204,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun enterSelectionMode(path: String) {
         _isSelectionMode.value = true
         _selectedFiles.value = setOf(path)
-        refreshFileSelection()
+        applySelection()
     }
 
     fun toggleSelection(item: FileItem) {
         val cur = _selectedFiles.value?.toMutableSet() ?: mutableSetOf()
         if (item.path in cur) cur.remove(item.path) else cur.add(item.path)
         _selectedFiles.value = cur
-        if (cur.isEmpty()) exitSelectionMode()
-        refreshFileSelection()
+        if (cur.isEmpty()) exitSelectionMode() else applySelection()
     }
 
     fun selectAll() {
         _selectedFiles.value = _files.value?.map { it.path }?.toSet() ?: emptySet()
-        refreshFileSelection()
+        applySelection()
     }
 
     fun exitSelectionMode() {
         _isSelectionMode.value = false
-        _selectedFiles.value = emptySet()
-        refreshFileSelection()
+        _selectedFiles.value   = emptySet()
+        applySelection()
     }
 
-    private fun refreshFileSelection() {
+    /**
+     * ✅ FIX: applySelection chạy trên IO thread (map trên list lớn tốn CPU)
+     * Dùng postValue để trả về Main thread sau khi xong.
+     */
+    private fun applySelection() {
+        val current  = _files.value ?: return
         val selected = _selectedFiles.value ?: emptySet()
-        _files.value = _files.value?.map { it.copy(isSelected = it.path in selected) }
+        if (selected.isEmpty() && current.none { it.isSelected }) return  // không thay đổi gì
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val updated = current.map { it.copy(isSelected = it.path in selected) }
+            _files.postValue(updated)
+        }
     }
 
     fun getSelectedItems(): List<FileItem> {
@@ -246,7 +252,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (items.isEmpty()) return
         viewModelScope.launch {
             try {
-                val ok = repository.moveToTrash(items)
+                val ok = withContext(Dispatchers.IO) { repository.moveToTrash(items) }
                 if (ok) {
                     _toastMessage.value = "Đã chuyển ${items.size} mục vào thùng rác"
                     exitSelectionMode()

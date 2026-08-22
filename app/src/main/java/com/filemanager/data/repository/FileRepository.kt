@@ -19,7 +19,11 @@ class FileRepository(private val context: Context) {
                 val dir = File(path)
                 if (!dir.exists() || !dir.isDirectory || !dir.canRead())
                     return@withContext emptyList()
-                val files = dir.listFiles()?.map { FileItem(it) } ?: emptyList()
+                // ✅ Giới hạn 2000 item để tránh OOM trên Android 9 (heap nhỏ hơn)
+                val files = dir.listFiles()
+                    ?.take(2000)
+                    ?.map { FileItem(it) }
+                    ?: emptyList()
                 sortFiles(files, sortType)
             } catch (e: Exception) {
                 emptyList()

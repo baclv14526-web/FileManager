@@ -83,8 +83,12 @@ class MainActivity : AppCompatActivity() {
         binding.recyclerView.apply {
             adapter = fileAdapter
             layoutManager = LinearLayoutManager(this@MainActivity)
+            // ✅ Tối ưu RecyclerView cho list lớn
+            setHasFixedSize(true)
+            setItemViewCacheSize(20)
+            recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_LIST, 20)
+            recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_GRID, 20)
         }
-        // Attach FastScroller
         binding.fastScroller.attachToRecyclerView(binding.recyclerView)
     }
 
@@ -230,23 +234,24 @@ class MainActivity : AppCompatActivity() {
         viewModel.files.observe(this) { files ->
             val query = binding.searchEditText.text?.toString() ?: ""
             if (query.isEmpty()) {
-                fileAdapter.submitList(files)
+                // ✅ callback sau khi AsyncListDiffer diff xong → cập nhật FastScroller
+                fileAdapter.submitList(files) {
+                    binding.fastScroller.setItems(files)
+                }
                 binding.emptyView.visibility =
                     if (files.isEmpty()) View.VISIBLE else View.GONE
-                // Cập nhật FastScroller với danh sách mới
-                binding.fastScroller.setItems(files)
             }
         }
 
         viewModel.searchResults.observe(this) { results ->
             if (results != null) {
-                fileAdapter.submitList(results)
+                fileAdapter.submitList(results) {
+                    binding.fastScroller.setItems(results)
+                }
                 binding.emptyView.visibility =
                     if (results.isEmpty()) View.VISIBLE else View.GONE
                 binding.emptyText.text =
                     if (results.isEmpty()) "Không tìm thấy kết quả" else ""
-                // Cập nhật FastScroller
-                binding.fastScroller.setItems(results)
             }
         }
 
