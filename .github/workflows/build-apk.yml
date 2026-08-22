@@ -13,11 +13,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -25,32 +23,20 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # 3. Tạo gradle-wrapper.jar nếu thiếu
-      #    (file binary ~60KB, không thể commit bằng text editor)
       - name: Setup Gradle Wrapper
         run: |
           GRADLE_VERSION=8.6
-
-          # Chỉ download nếu thiếu file jar
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Downloading Gradle $GRADLE_VERSION to generate wrapper jar..."
+            echo "Downloading Gradle $GRADLE_VERSION..."
             wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
                  -O /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/
-            echo "Generating wrapper..."
             /tmp/gradle-${GRADLE_VERSION}/bin/gradle wrapper \
               --gradle-version=${GRADLE_VERSION} \
-              --distribution-type=bin \
-              --project-dir .
-            echo "gradle-wrapper.jar size: $(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes"
-          else
-            echo "gradle-wrapper.jar already exists ($(wc -c < gradle/wrapper/gradle-wrapper.jar) bytes)"
+              --distribution-type=bin
           fi
-
           chmod +x gradlew
-          ./gradlew --version
 
-      # 4. Cache
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -60,9 +46,18 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      # 5. Build Debug
+      # Build Debug — in đầy đủ lỗi Kotlin nếu fail
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            -Pkotlin.incremental=false \
+            2>&1 | tee build_log.txt
+          # Grep chỉ phần lỗi Kotlin để dễ đọc
+          echo "=== KOTLIN ERRORS ==="
+          grep -E "error:|warning:|\.kt:[0-9]" build_log.txt | head -60 || true
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -71,11 +66,18 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
-      # 6. Build Release
+      # Upload build log khi fail để debug
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-v${{ github.run_number }}
+          path: build_log.txt
+          retention-days: 7
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-      # 7. Ký APK nếu có secrets
       - name: Sign Release APK
         id: sign_apk
         if: env.HAS_KEY == 'true'
@@ -90,7 +92,6 @@ jobs:
           HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
           BUILD_TOOLS_VERSION: "34.0.0"
 
-      # 8a. Upload signed
       - name: Upload Signed Release APK
         if: env.HAS_KEY == 'true'
         uses: actions/upload-artifact@v4
@@ -101,7 +102,6 @@ jobs:
         env:
           HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
-      # 8b. Upload unsigned fallback
       - name: Upload Unsigned Release APK
         if: env.HAS_KEY != 'true'
         uses: actions/upload-artifact@v4
@@ -112,7 +112,6 @@ jobs:
         env:
           HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
-      # 9. GitHub Release khi push tag
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

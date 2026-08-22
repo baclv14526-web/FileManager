@@ -7,76 +7,67 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.*
 import android.view.animation.AccelerateDecelerateInterpolator
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.filemanager.data.model.FileItem
 import kotlin.math.roundToInt
 
-/**
- * FastScroller — thanh cuộn nhanh bên phải màn hình.
- *
- * Tính năng:
- *  - Thanh track mỏng + thumb kéo được
- *  - Bubble hiện chữ cái / ký tự đầu tiên của item tại vị trí đang kéo
- *  - Tự ẩn sau 1.5s khi không dùng (fade-out)
- *  - Tự hiện khi list scroll (fade-in)
- *  - Chỉ hiện khi có ≥ MIN_ITEMS items
- */
 class FastScroller @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
     companion object {
-        private const val MIN_ITEMS       = 30     // hiện khi ≥ 30 items
-        private const val HIDE_DELAY_MS   = 1500L
-        private const val TRACK_WIDTH_DP  = 4f
-        private const val THUMB_WIDTH_DP  = 4f
-        private const val THUMB_MIN_H_DP  = 36f
-        private const val BUBBLE_SIZE_DP  = 48f
-        private const val TRACK_PADDING_DP= 16f   // padding top/bottom
+        private const val MIN_ITEMS      = 30
+        private const val HIDE_DELAY_MS  = 1500L
+        private const val TRACK_W_DP    = 4f
+        private const val THUMB_W_DP    = 4f
+        private const val THUMB_MIN_DP  = 36f
+        private const val BUBBLE_DP     = 48f
+        private const val PAD_DP        = 16f
     }
 
     // ── Paints ──────────────────────────────────────────────────
 
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x22000000
-        style = Paint.Style.FILL
+        color = 0x22000000; style = Paint.Style.FILL
     }
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF1565C0.toInt()
-        style = Paint.Style.FILL
+        color = 0xFF1565C0.toInt(); style = Paint.Style.FILL
     }
     private val thumbActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF0D47A1.toInt()
-        style = Paint.Style.FILL
+        color = 0xFF0D47A1.toInt(); style = Paint.Style.FILL
     }
     private val bubblePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFF1565C0.toInt()
-        style = Paint.Style.FILL
+        color = 0xFF1565C0.toInt(); style = Paint.Style.FILL
     }
-    private val bubbleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = sp(18f)
         textAlign = Paint.Align.CENTER
         typeface = Typeface.DEFAULT_BOLD
     }
 
     // ── Dimensions ──────────────────────────────────────────────
 
-    private val trackWidth    = dp(TRACK_WIDTH_DP)
-    private val thumbWidth    = dp(THUMB_WIDTH_DP)
-    private val thumbMinH     = dp(THUMB_MIN_H_DP)
-    private val bubbleSize    = dp(BUBBLE_SIZE_DP)
-    private val trackPadding  = dp(TRACK_PADDING_DP)
+    private val trackW   get() = dp(TRACK_W_DP)
+    private val thumbW   get() = dp(THUMB_W_DP)
+    private val thumbMin get() = dp(THUMB_MIN_DP)
+    private val bubbleSz get() = dp(BUBBLE_DP)
+    private val pad      get() = dp(PAD_DP)
 
     // ── State ───────────────────────────────────────────────────
 
-    private var recyclerView: RecyclerView? = null
+    private var rv: RecyclerView? = null
+
+    // File list mode
     private var items: List<FileItem> = emptyList()
+
+    // Timeline mode
+    private var customLabels: List<Pair<Int, String>> = emptyList()
+    private var totalItemCount: Int = 0
+
     private var isDragging = false
-    private var thumbTop = 0f
-    private var thumbHeight = thumbMinH
+    private var thumbTop   = 0f
+    private var thumbH     = 0f
 
     private val hideRunnable = Runnable { animateAlpha(0f) }
 
@@ -84,27 +75,38 @@ class FastScroller @JvmOverloads constructor(
 
     private val scrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
-            if (!isDragging) updateThumbFromScroll()
-            if (items.size >= MIN_ITEMS) {
-                animateAlpha(1f)
-                scheduleHide()
-            }
+            if (!isDragging) syncThumb()
+            val count = if (customLabels.isNotEmpty()) totalItemCount else items.size
+            if (count >= MIN_ITEMS) { animateAlpha(1f); scheduleHide() }
         }
     }
 
     // ── Public API ──────────────────────────────────────────────
 
-    fun attachToRecyclerView(rv: RecyclerView) {
-        recyclerView?.removeOnScrollListener(scrollListener)
-        recyclerView = rv
-        rv.addOnScrollListener(scrollListener)
+    fun attachToRecyclerView(recyclerView: RecyclerView) {
+        rv?.removeOnScrollListener(scrollListener)
+        rv = recyclerView
+        recyclerView.addOnScrollListener(scrollListener)
         alpha = 0f
     }
 
+    /** File list mode */
     fun setItems(newItems: List<FileItem>) {
-        items = newItems
-        visibility = if (newItems.size >= MIN_ITEMS) VISIBLE else INVISIBLE
-        updateThumbFromScroll()
+        items        = newItems
+        customLabels = emptyList()
+        totalItemCount = 0
+        visibility   = if (newItems.size >= MIN_ITEMS) VISIBLE else INVISIBLE
+        syncThumb()
+        invalidate()
+    }
+
+    /** Timeline mode — labels: list of (position, displayLabel) */
+    fun setTimelineLabels(labels: List<Pair<Int, String>>, total: Int) {
+        customLabels   = labels
+        totalItemCount = total
+        items          = emptyList()
+        visibility     = if (total >= MIN_ITEMS) VISIBLE else INVISIBLE
+        syncThumb()
         invalidate()
     }
 
@@ -112,155 +114,141 @@ class FastScroller @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val trackTop    = trackPadding
-        val trackBottom = height - trackPadding
+        val trackTop    = pad
+        val trackBottom = height - pad
 
-        when (event.action) {
+        return when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                // Hit-test: только если tap попал на thumb
-                if (event.x >= width - dp(24f)) {
+                if (event.x >= width - dp(28f)) {
                     isDragging = true
                     removeCallbacks(hideRunnable)
                     animateAlpha(1f)
-                    moveTo(event.y, trackTop, trackBottom)
-                    return true
-                }
-                return false
+                    dragTo(event.y, trackTop, trackBottom)
+                    true
+                } else false
             }
             MotionEvent.ACTION_MOVE -> {
-                if (isDragging) {
-                    moveTo(event.y, trackTop, trackBottom)
-                    return true
-                }
+                if (isDragging) { dragTo(event.y, trackTop, trackBottom); true }
+                else false
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 isDragging = false
                 scheduleHide()
                 invalidate()
+                true
             }
+            else -> false
         }
-        return isDragging
     }
 
-    private fun moveTo(y: Float, trackTop: Float, trackBottom: Float) {
-        val trackH = trackBottom - trackTop - thumbHeight
-        val clamped = (y - trackTop - thumbHeight / 2f).coerceIn(0f, trackH)
-        thumbTop = trackTop + clamped
-        val fraction = clamped / trackH.coerceAtLeast(1f)
-        scrollRecyclerViewTo(fraction)
+    private fun dragTo(y: Float, trackTop: Float, trackBottom: Float) {
+        val range   = (trackBottom - trackTop - thumbH).coerceAtLeast(1f)
+        val clamped = (y - trackTop - thumbH / 2f).coerceIn(0f, range)
+        thumbTop    = trackTop + clamped
+        scrollToFraction(clamped / range)
         invalidate()
     }
 
-    private fun scrollRecyclerViewTo(fraction: Float) {
-        val rv = recyclerView ?: return
-        val total = rv.computeVerticalScrollRange()
-        val offset = (fraction * total).roundToInt()
-        rv.scrollBy(0, offset - rv.computeVerticalScrollOffset())
+    private fun scrollToFraction(fraction: Float) {
+        val r  = rv ?: return
+        val total  = r.computeVerticalScrollRange()
+        val target = (fraction * total).roundToInt()
+        r.scrollBy(0, target - r.computeVerticalScrollOffset())
     }
 
     // ── Draw ────────────────────────────────────────────────────
 
     override fun onDraw(canvas: Canvas) {
-        if (items.size < MIN_ITEMS) return
+        val count = if (customLabels.isNotEmpty()) totalItemCount else items.size
+        if (count < MIN_ITEMS) return
 
-        val trackTop    = trackPadding
-        val trackBottom = height - trackPadding
-        val cx          = width - trackWidth / 2f
+        textPaint.textSize = sp(18f)
+
+        val trackTop    = pad
+        val trackBottom = height - pad
+        val cx          = width - trackW / 2f
 
         // Track
         canvas.drawRoundRect(
-            cx - trackWidth / 2f, trackTop,
-            cx + trackWidth / 2f, trackBottom,
-            trackWidth / 2f, trackWidth / 2f,
-            trackPaint
+            cx - trackW / 2f, trackTop, cx + trackW / 2f, trackBottom,
+            trackW / 2f, trackW / 2f, trackPaint
         )
 
-        // Thumb
+        // Thumb (thicker when dragging)
+        val tw    = if (isDragging) thumbW * 2.5f else thumbW
         val paint = if (isDragging) thumbActivePaint else thumbPaint
-        val tw    = if (isDragging) thumbWidth * 2 else thumbWidth
         canvas.drawRoundRect(
-            cx - tw / 2f, thumbTop,
-            cx + tw / 2f, thumbTop + thumbHeight,
-            tw / 2f, tw / 2f,
-            paint
+            cx - tw / 2f, thumbTop, cx + tw / 2f, thumbTop + thumbH,
+            tw / 2f, tw / 2f, paint
         )
 
-        // Bubble (chỉ khi drag)
+        // Bubble label when dragging
         if (isDragging) {
-            val bubbleLabel = getLabelAt(thumbTop, trackTop, trackBottom)
-            val bx    = width - dp(24f) - bubbleSize
-            val byCtr = (thumbTop + thumbHeight / 2f)
-                .coerceIn(trackTop + bubbleSize / 2f, trackBottom - bubbleSize / 2f)
+            val label = getLabelAt(thumbTop, trackTop, trackBottom)
+            val bx    = width - dp(28f) - bubbleSz
+            val byCtr = (thumbTop + thumbH / 2f)
+                .coerceIn(trackTop + bubbleSz / 2f, trackBottom - bubbleSz / 2f)
 
-            // Vẽ hình tròn bubble
-            canvas.drawCircle(bx + bubbleSize / 2f, byCtr, bubbleSize / 2f, bubblePaint)
-
-            // Vẽ chữ
-            val textY = byCtr - (bubbleTextPaint.ascent() + bubbleTextPaint.descent()) / 2f
-            canvas.drawText(bubbleLabel, bx + bubbleSize / 2f, textY, bubbleTextPaint)
+            canvas.drawCircle(bx + bubbleSz / 2f, byCtr, bubbleSz / 2f, bubblePaint)
+            val textY = byCtr - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(label, bx + bubbleSz / 2f, textY, textPaint)
         }
     }
 
-    // ── Label logic ─────────────────────────────────────────────
+    // ── Label ───────────────────────────────────────────────────
 
     private fun getLabelAt(tTop: Float, trackTop: Float, trackBottom: Float): String {
-        val trackH   = (trackBottom - trackTop - thumbHeight).coerceAtLeast(1f)
-        val fraction = ((tTop - trackTop) / trackH).coerceIn(0f, 1f)
+        val range    = (trackBottom - trackTop - thumbH).coerceAtLeast(1f)
+        val fraction = ((tTop - trackTop) / range).coerceIn(0f, 1f)
 
-        // Mode Timeline: dùng customLabels
+        // Timeline mode
         if (customLabels.isNotEmpty() && totalItemCount > 0) {
             val pos = (fraction * (totalItemCount - 1)).roundToInt()
-            // Tìm header gần nhất phía trên vị trí hiện tại
-            val label = customLabels.lastOrNull { it.first <= pos }
-                ?: customLabels.firstOrNull()
-            return label?.second ?: "#"
+            return (customLabels.lastOrNull { it.first <= pos }
+                ?: customLabels.firstOrNull())?.second ?: "#"
         }
 
-        // Mode FileList: dùng items
+        // File list mode
         if (items.isEmpty()) return "#"
-        val index = (fraction * (items.size - 1)).roundToInt()
-            .coerceIn(0, items.lastIndex)
-        val item = items[index]
+        val idx  = (fraction * (items.size - 1)).roundToInt().coerceIn(0, items.lastIndex)
+        val item = items[idx]
         return when {
-            item.isDirectory -> "📁"
+            item.isDirectory                      -> "📁"
             item.name.firstOrNull()?.isDigit() == true -> "#"
             else -> item.name.firstOrNull()?.uppercaseChar()?.toString() ?: "#"
         }
     }
 
-    // ── Thumb position sync ─────────────────────────────────────
+    // ── Sync thumb from scroll position ─────────────────────────
 
-    private fun updateThumbFromScroll() {
-        val rv = recyclerView ?: return
+    private fun syncThumb() {
+        val r = rv ?: return
         if (height == 0) return
 
-        val trackTop    = trackPadding
-        val trackBottom = height - trackPadding
+        val trackTop    = pad
+        val trackBottom = height - pad
         val trackH      = (trackBottom - trackTop).coerceAtLeast(1f)
 
-        // Tính chiều cao thumb tỉ lệ với visible / total
-        val range    = rv.computeVerticalScrollRange().coerceAtLeast(1)
-        val extent   = rv.computeVerticalScrollExtent().coerceAtLeast(0)
-        val ratio    = extent.toFloat() / range
-        thumbHeight  = (ratio * trackH).coerceAtLeast(thumbMinH)
+        val range  = r.computeVerticalScrollRange().coerceAtLeast(1)
+        val extent = r.computeVerticalScrollExtent().coerceAtLeast(0)
+        thumbH     = (extent.toFloat() / range * trackH).coerceAtLeast(thumbMin)
 
-        // Vị trí thumb
-        val offset   = rv.computeVerticalScrollOffset()
+        val offset   = r.computeVerticalScrollOffset()
         val fraction = offset.toFloat() / (range - extent).coerceAtLeast(1)
-        thumbTop     = trackTop + fraction * (trackH - thumbHeight)
+        thumbTop     = trackTop + fraction * (trackH - thumbH)
 
         invalidate()
     }
 
     // ── Alpha animation ─────────────────────────────────────────
 
-    private var alphaAnimator: ObjectAnimator? = null
+    private var alphaAnim: ObjectAnimator? = null
 
     private fun animateAlpha(to: Float) {
         if (alpha == to) return
-        alphaAnimator?.cancel()
-        alphaAnimator = ObjectAnimator.ofFloat(this, "alpha", alpha, to).apply {
-            duration    = 200
+        alphaAnim?.cancel()
+        alphaAnim = ObjectAnimator.ofFloat(this, "alpha", alpha, to).apply {
+            duration     = 200
             interpolator = AccelerateDecelerateInterpolator()
             start()
         }
@@ -273,17 +261,6 @@ class FastScroller @JvmOverloads constructor(
 
     // ── Helpers ─────────────────────────────────────────────────
 
-    private fun dp(value: Float) = value * resources.displayMetrics.density
-    private fun sp(value: Float) = value * resources.displayMetrics.scaledDensity
-}
-
-// Extension: hỗ trợ Timeline dùng label tùy ý thay vì chữ cái từ FileItem
-private var customLabels: List<Pair<Int, String>> = emptyList() // (position, label)
-private var totalItemCount: Int = 0
-
-fun setTimelineLabels(labels: List<Pair<Int, String>>, total: Int) {
-    customLabels = labels
-    totalItemCount = total
-    visibility = if (total >= MIN_ITEMS) VISIBLE else INVISIBLE
-    invalidate()
+    private fun dp(v: Float) = v * resources.displayMetrics.density
+    private fun sp(v: Float) = v * resources.displayMetrics.scaledDensity
 }

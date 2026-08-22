@@ -38,7 +38,7 @@ class QxSpeedController(
         if (isActive) return
         isActive = true
         job = scope.launch {
-            while (isActive && isActive(this)) {
+            while (isActive && this.isActive) {
                 tick()
                 delay(tickIntervalMs)
             }
@@ -113,5 +113,5 @@ class QxSpeedController(
         }
     }
 
-    private fun isActive(scope: CoroutineScope) = scope.isActive
+    
 }
