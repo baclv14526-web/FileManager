@@ -141,6 +141,12 @@ class FileListAdapter(
         holder.itemView.clearAnimation()
     }
 
+    // ✅ Shutdown executor khi adapter detach → tránh memory leak
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        bgExecutor.shutdown()
+    }
+
     // ── List ViewHolder ──────────────────────────────────────────
 
     inner class ListViewHolder(val binding: ItemFileListBinding) :

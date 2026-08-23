@@ -1,7 +1,10 @@
 package com.filemanager.ui.viewer
 
+import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
@@ -54,12 +57,22 @@ class ImageViewerActivity : AppCompatActivity() {
     private fun toggleUI() {
         isUiVisible = !isUiVisible
         val visibility = if (isUiVisible) View.VISIBLE else View.GONE
-        binding.topBar.visibility = visibility
+        binding.topBar.visibility    = visibility
         binding.bottomBar.visibility = visibility
-        if (isUiVisible) {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.let { ctrl ->
+                if (isUiVisible) {
+                    ctrl.show(WindowInsets.Type.statusBars())
+                } else {
+                    ctrl.hide(WindowInsets.Type.statusBars())
+                    ctrl.systemBarsBehavior =
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
         } else {
-            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            @Suppress("DEPRECATION")
+            if (isUiVisible) window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            else window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         }
     }
 }

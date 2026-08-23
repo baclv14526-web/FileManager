@@ -37,7 +37,8 @@ class QxSpeedController(
     fun start(scope: CoroutineScope) {
         if (isActive) return
         isActive = true
-        job = scope.launch {
+        // Dispatchers.Main.immediate đảm bảo ExoPlayer call trên Main thread
+        job = scope.launch(kotlinx.coroutines.Dispatchers.Main.immediate) {
             while (isActive && this.isActive) {
                 tick()
                 delay(tickIntervalMs)

@@ -11,6 +11,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.filemanager.R
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -97,7 +98,7 @@ class ZoomableImageView(context: android.content.Context) : androidx.appcompat.w
                 if (!scaleDetector.isInProgress && scaleFactor > 1f) {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
-                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) isDragging = true
+                    if (abs(dx) > 10 || abs(dy) > 10) isDragging = true
                     translateX += dx
                     translateY += dy
                     applyTransform()

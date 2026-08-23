@@ -118,9 +118,9 @@ object StorageHelper {
             .filterNotNull()
             .mapNotNull { appDir ->
                 // Đi ngược lên root của volume: /storage/xxxx/Android/data/pkg/files → /storage/xxxx
-                var f = appDir
-                repeat(4) { f = f.parentFile ?: return@repeat }
-                if (f.canRead()) f else null
+                var f: File? = appDir
+                for (i in 0 until 4) { f = f?.parentFile }
+                f?.takeIf { it.canRead() }
             }
     } catch (e: Exception) { emptyList() }
 }

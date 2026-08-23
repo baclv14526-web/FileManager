@@ -40,7 +40,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         Z200  ("200%", 2.0f),   // zoom 200%
         CROP  ("CROP", 1.0f);   // fill toàn màn hình, crop 2 cạnh
 
-        fun next() = values()[(ordinal + 1) % values().size]
+        fun next() = entries[(ordinal + 1) % entries.size]
     }
     private var zoomMode = ZoomMode.FIT
 
@@ -256,6 +256,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun releasePlayer() {
         qxController?.stop()
         qxController = null
+        isQxActive = false   // reset để tránh double-start khi resume
         player?.let {
             playWhenReady   = it.playWhenReady
             currentPosition = it.currentPosition

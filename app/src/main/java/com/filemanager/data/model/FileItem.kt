@@ -7,15 +7,27 @@ import java.util.Date
 
 @Parcelize
 data class FileItem(
-    val file: File,
-    val name: String = file.name,
-    val path: String = file.absolutePath,
-    val isDirectory: Boolean = file.isDirectory,
-    val size: Long = if (file.isFile) file.length() else 0L,
-    val lastModified: Long = file.lastModified(),
-    val extension: String = file.extension.lowercase(),
+    val path: String,                                          // primary field
+    val name: String = File(path).name,
+    val isDirectory: Boolean = File(path).isDirectory,
+    val size: Long = File(path).let { if (it.isFile) it.length() else 0L },
+    val lastModified: Long = File(path).lastModified(),
+    val extension: String = File(path).extension.lowercase(),
     var isSelected: Boolean = false
 ) : Parcelable {
+
+    // Reconstruct File từ path — không parcel File object trực tiếp
+    @kotlinx.parcelize.IgnoredOnParcel
+    val file: File = File(path)
+
+    constructor(file: File) : this(
+        path        = file.absolutePath,
+        name        = file.name,
+        isDirectory = file.isDirectory,
+        size        = if (file.isFile) file.length() else 0L,
+        lastModified= file.lastModified(),
+        extension   = file.extension.lowercase()
+    )
 
     val fileType: FileType get() = when {
         isDirectory -> FileType.FOLDER

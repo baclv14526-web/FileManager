@@ -76,8 +76,8 @@ object LoadingHelper {
     ) {
         val root = activity.window.decorView as? ViewGroup ?: return
         if (root.findViewWithTag<View>(TAG_OVERLAY) != null) {
-            // Đã có overlay → chỉ update text
-            root.findViewWithTag<TextView>(TAG_OVERLAY)?.text = message
+            // Đã có overlay → update message và return
+            updateOverlayMessage(activity, message, subMsg)
             return
         }
 
