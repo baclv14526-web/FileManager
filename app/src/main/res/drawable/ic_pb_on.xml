@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Active: cyan tint với background -->
+    <path android:fillColor="#3300BCD4"
+        android:pathData="M1,7 h22 v10 h-22 z"/>
+    <path android:fillColor="#00BCD4"
+        android:pathData="M6,18L14.5,12L6,6V18ZM15,6V18H17V6H15Z"/>
+    <path android:fillColor="#00BCD4"
+        android:pathData="M19,8 A1.5,1.5 0 1,1 19,11 A1.5,1.5 0 1,1 19,8Z"/>
+</vector>

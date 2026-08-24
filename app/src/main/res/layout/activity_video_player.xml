@@ -54,15 +54,52 @@
             android:ellipsize="middle"
             android:layout_marginHorizontal="8dp"/>
 
+        <!-- PB Preview button -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginEnd="2dp">
+            <ImageButton
+                android:id="@+id/btnPb"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_pb_off"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="PB Preview"/>
+            <TextView
+                android:id="@+id/tvPbLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pb"
+                android:textColor="#CCFFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
         <!-- QX Speed button -->
-        <ImageButton
-            android:id="@+id/btnQx"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@drawable/ic_qx_off"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="QX Speed"
-            android:layout_marginEnd="2dp"/>
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginEnd="2dp">
+            <ImageButton
+                android:id="@+id/btnQx"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_qx_off"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="QX Speed"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="QX"
+                android:textColor="#CCFFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
 
         <!-- Zoom cycle button: FIT → 100% → 150% → 200% → CROP -->
         <LinearLayout
@@ -100,6 +137,99 @@
             android:src="@drawable/ic_screen_rotation"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Xoay màn hình"/>
+    </LinearLayout>
+
+    <!-- ── Pb Preview Panel ────────────────────────────────────── -->
+    <!--
+        Hiện khi Pb đang bật:
+        - Segment hiện tại / tổng số segment
+        - Thanh tiến trình các điểm nhảy
+        - Đếm ngược 30 giây thực
+    -->
+    <LinearLayout
+        android:id="@+id/pbPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#CC000000"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Dòng 1: Pb label + segment + đếm ngược -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pb"
+                android:textColor="#00BCD4"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="#3300BCD4"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:layout_marginEnd="10dp"/>
+
+            <TextView
+                android:id="@+id/tvPbSegment"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Đoạn 1/1"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"/>
+
+            <!-- Countdown 30s -->
+            <TextView
+                android:id="@+id/tvPbCountdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="30s"
+                android:textColor="#00BCD4"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
+        <!-- Dòng 2: dots / segments indicator -->
+        <LinearLayout
+            android:id="@+id/pbDotsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp"/>
+
+        <!-- Dòng 3: thanh tiến trình 30s -->
+        <ProgressBar
+            android:id="@+id/pbCountdownBar"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:max="100"
+            android:progress="100"
+            style="@style/Widget.Material3.LinearProgressIndicator"
+            android:layout_marginBottom="2dp"/>
+
+        <!-- Dòng 4: mô tả vị trí -->
+        <TextView
+            android:id="@+id/tvPbPosition"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp"/>
+
     </LinearLayout>
 
     <!-- ── QX Info Panel ──────────────────────────────────────── -->
