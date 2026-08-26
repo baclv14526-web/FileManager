@@ -53,7 +53,7 @@ class PbPlayController(
 
         job = scope.launch(Dispatchers.Main.immediate) {
             segments.forEachIndexed { index, posMs ->
-                if (!isActive) return@launch
+                if (!this@PbPlayController.isActive) return@launch
 
                 // Seek đến vị trí + bật tốc độ 2x
                 player.seekTo(posMs)
@@ -64,7 +64,7 @@ class PbPlayController(
                 // Phát 30 giây thực: đếm bằng tick thay vì delay() đơn lẻ
                 // để có thể bị cancel sạch hơn
                 var elapsed = 0L
-                while (elapsed < SEGMENT_REAL_MS && isActive) {
+                while (elapsed < SEGMENT_REAL_MS && this@PbPlayController.isActive) {
                     delay(TICK_MS)
                     elapsed += TICK_MS
                     // Nếu video đã kết thúc sớm → thoát luôn
@@ -76,7 +76,7 @@ class PbPlayController(
                 }
             }
             // Xong tất cả đoạn
-            if (isActive) {
+            if (this@PbPlayController.isActive) {
                 stop()
                 onFinished()
             }

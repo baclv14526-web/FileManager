@@ -22,8 +22,6 @@ import com.filemanager.databinding.ItemCleanupSummaryBinding
 import com.filemanager.utils.FileUtils
 import com.filemanager.utils.StorageVolume
 import java.util.concurrent.Executors
-import com.filemanager.utils.StorageVolume
-import java.util.concurrent.Executors
 
 class CleanupAdapter(
     private val onScan: (scope: Int) -> Unit,

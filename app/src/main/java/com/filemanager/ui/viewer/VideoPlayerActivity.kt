@@ -282,37 +282,11 @@ class VideoPlayerActivity : AppCompatActivity() {
         val container = binding.pbDotsContainer
         container.removeAllViews()
 
-        val dpSize    = (resources.displayMetrics.density * 10).toInt()
-        val dpMargin  = (resources.displayMetrics.density * 4).toInt()
+        val dpSize   = (resources.displayMetrics.density * 10).toInt()
+        val dpMargin = (resources.displayMetrics.density * 4).toInt()
+        val lineW    = (resources.displayMetrics.density * 16).toInt()
+        val lineH    = (resources.displayMetrics.density * 2).toInt()
 
-        for (i in 0 until total) {
-            val dot = ImageView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(dpSize, dpSize).also {
-                    it.marginEnd = dpMargin
-                }
-                when {
-                    i < currentIdx  -> setImageResource(R.drawable.dot_done)    // xem rồi
-                    i == currentIdx -> setImageResource(R.drawable.dot_current)  // đang xem
-                    else            -> setImageResource(R.drawable.dot_pending)  // chưa xem
-                }
-            }
-            container.addView(dot)
-        }
-
-        // Đường kẻ giữa các dots
-        val lineWidth = (resources.displayMetrics.density * 16).toInt()
-        for (i in 0 until total - 1) {
-            val line = View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(lineWidth, (resources.displayMetrics.density * 1).toInt()).also {
-                    it.marginEnd = dpMargin
-                    it.topMargin = dpSize / 2 - 1
-                }
-                setBackgroundColor(if (i < currentIdx) 0xFF00BCD4.toInt() else 0x55FFFFFF.toInt())
-            }
-            // Thêm line sau dot i — rebuild lại toàn bộ
-        }
-        // Rebuild với line connector
-        container.removeAllViews()
         for (i in 0 until total) {
             val dot = ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(dpSize, dpSize).also {
@@ -326,12 +300,10 @@ class VideoPlayerActivity : AppCompatActivity() {
             }
             container.addView(dot)
 
-            // Connector line giữa 2 dots
             if (i < total - 1) {
                 val line = View(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(lineWidth,
-                        (resources.displayMetrics.density * 2).toInt()).also {
-                        it.gravity = android.view.Gravity.CENTER_VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(lineW, lineH).also {
+                        it.gravity     = android.view.Gravity.CENTER_VERTICAL
                         it.marginStart = dpMargin / 2
                         it.marginEnd   = dpMargin / 2
                     }
