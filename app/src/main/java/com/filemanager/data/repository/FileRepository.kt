@@ -7,6 +7,7 @@ import com.filemanager.data.model.FileItem
 import com.filemanager.data.model.SortType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,26 +31,62 @@ class FileRepository(private val context: Context) {
             }
         }
 
+    companion object {
+        // Giới hạn để search không bị "treo" khi quét toàn bộ storage root
+        private const val SEARCH_MAX_RESULTS = 500
+        private const val SEARCH_MAX_DEPTH   = 15
+        // Các thư mục hệ thống rất lớn, hiếm khi người dùng cần tìm bên trong,
+        // bỏ qua để search nhanh hơn nhiều lần
+        private val SEARCH_SKIP_DIRS = setOf(
+            "Android", ".thumbnails", ".cache", "cache",
+            "lost.dir", ".git", "node_modules"
+        )
+    }
+
     suspend fun searchFiles(query: String, rootPath: String): List<FileItem> =
         withContext(Dispatchers.IO) {
             try {
                 val dir = File(rootPath)
                 if (!dir.exists() || !dir.canRead()) return@withContext emptyList()
                 val results = mutableListOf<FileItem>()
-                searchRecursive(dir, query.lowercase(), results)
+                searchRecursive(dir, query.lowercase(), results, depth = 0)
                 results
             } catch (e: Exception) {
                 emptyList()
             }
         }
 
-    private fun searchRecursive(dir: File, query: String, results: MutableList<FileItem>) {
+    /**
+     * ✅ FIX: suspend fun + yield() định kỳ để coroutine cancellation hoạt động
+     * (trước đây là fun thường → khi user gõ ký tự mới, searchJob.cancel() không
+     * thể dừng vòng lặp đang chạy → kết quả cũ "trễ" đè lên kết quả mới).
+     *
+     * ✅ FIX: giới hạn SEARCH_MAX_RESULTS + SEARCH_MAX_DEPTH → tránh quét vô hạn
+     * khi scope mặc định là toàn bộ storage root lúc mới mở app.
+     */
+    private suspend fun searchRecursive(
+        dir: File, query: String, results: MutableList<FileItem>, depth: Int
+    ) {
+        if (results.size >= SEARCH_MAX_RESULTS) return
+        if (depth > SEARCH_MAX_DEPTH) return
         if (!dir.exists() || !dir.canRead()) return
+
+        // Nhường CPU định kỳ → cho phép coroutine.cancel() cắt ngang kịp thời
+        yield()
+
         try {
-            dir.listFiles()?.forEach { file ->
+            val children = dir.listFiles() ?: return
+            for (file in children) {
+                if (results.size >= SEARCH_MAX_RESULTS) return
+
                 if (file.name.lowercase().contains(query)) results.add(FileItem(file))
-                if (file.isDirectory && !file.name.startsWith("."))
-                    searchRecursive(file, query, results)
+
+                if (file.isDirectory &&
+                    !file.name.startsWith(".") &&
+                    file.name !in SEARCH_SKIP_DIRS
+                ) {
+                    searchRecursive(file, query, results, depth + 1)
+                }
             }
         } catch (e: Exception) { /* bỏ qua thư mục không đọc được */ }
     }

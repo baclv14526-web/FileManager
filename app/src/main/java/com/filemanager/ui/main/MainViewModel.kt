@@ -144,7 +144,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
                 val results = withContext(Dispatchers.IO) {
                     val raw = mutableListOf<FileItem>()
-                    roots.forEach { root -> raw += repository.searchFiles(query, root) }
+                    for (root in roots) {
+                        if (raw.size >= 500) break   // đủ kết quả — dừng sớm, không quét root tiếp theo
+                        raw += repository.searchFiles(query, root)
+                    }
                     raw.distinctBy { it.path }
                         .filter { fileType.matches(it) }
                         .sortedWith(compareBy({ it.fileType.ordinal }, { it.name.lowercase() }))
