@@ -129,6 +129,46 @@
                 android:fontFamily="monospace"/>
         </LinearLayout>
 
+        <!-- Speed selector button — thay thế menu settings ẩn của ExoPlayer,
+             luôn mở lại được dù chọn bao nhiêu lần -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="false"
+            android:layout_marginEnd="2dp">
+
+            <ImageButton
+                android:id="@+id/btnSpeed"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_speed"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Tốc độ phát"/>
+
+            <TextView
+                android:id="@+id/tvSpeedLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="1.0x"
+                android:textColor="#CCFFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
+        <!-- Audio track selector — chỉ hiện nếu video có >1 audio track -->
+        <ImageButton
+            android:id="@+id/btnAudio"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_audio_track"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Chọn âm thanh"
+            android:layout_marginEnd="2dp"
+            android:visibility="gone"/>
+
         <!-- Rotate button -->
         <ImageButton
             android:id="@+id/btnRotate"

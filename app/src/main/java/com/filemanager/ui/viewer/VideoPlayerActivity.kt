@@ -11,10 +11,15 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.filemanager.R
@@ -55,6 +60,16 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var pbController: PbPlayController? = null
     private var isPbActive = false
     private var pbCountdownJob: Job? = null
+
+    // Speed selector — tự viết, không phụ thuộc PopupWindow ẩn của ExoPlayer
+    // (nguồn gốc bug "chọn xong không mở lại được" trên một số thiết bị/Android 9)
+    private val speedPresets = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    private var currentSpeed = 1.0f
+
+    // Audio track selector
+    data class AudioTrackOption(val groupIndex: Int, val trackIndex: Int, val label: String)
+    private var audioTracks: List<AudioTrackOption> = emptyList()
+    private var selectedAudioTrack: AudioTrackOption? = null
 
     // ── Lifecycle ───────────────────────────────────────────────
 
@@ -116,6 +131,11 @@ class VideoPlayerActivity : AppCompatActivity() {
                         if (isPbActive) stopPb()
                     }
                 }
+                // Được gọi khi track info sẵn sàng (thường ngay sau STATE_READY)
+                // → cập nhật danh sách audio track + hiện/ẩn nút Audio đúng lúc
+                override fun onTracksChanged(tracks: Tracks) {
+                    refreshAudioTracks()
+                }
             })
 
             exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(path))))
@@ -154,6 +174,97 @@ class VideoPlayerActivity : AppCompatActivity() {
 
         binding.btnQx.setOnClickListener { if (isPbActive) stopPb(); toggleQx() }
         binding.btnPb.setOnClickListener { if (isQxActive) stopQx(); togglePb() }
+
+        // Nút tốc độ — luôn mở dialog mới mỗi lần tap, không giữ state ẩn
+        // nên KHÔNG BAO GIỜ bị kẹt "không mở lại được" như menu settings mặc định
+        binding.btnSpeed.setOnClickListener { showSpeedDialog() }
+        binding.btnAudio.setOnClickListener { showAudioTrackDialog() }
+    }
+
+    // ── Speed selector ──────────────────────────────────────────
+
+    private fun showSpeedDialog() {
+        val p = player ?: return
+        // Chọn speed thủ công thì tắt QX/Pb (2 mode auto-speed) để tránh xung đột
+        if (isQxActive) stopQx()
+        if (isPbActive) stopPb()
+
+        val labels = speedPresets.map {
+            if (it == 1.0f) "1.0x (Bình thường)" else "${it}x"
+        }.toTypedArray()
+        val checkedIdx = speedPresets.indexOfFirst { it == currentSpeed }.coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle("Tốc độ phát")
+            .setSingleChoiceItems(labels, checkedIdx) { dialog, which ->
+                currentSpeed = speedPresets[which]
+                p.playbackParameters = PlaybackParameters(currentSpeed)
+                binding.tvSpeedLabel.text = "${currentSpeed}x".replace(".0x", "x")
+                dialog.dismiss()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    // ── Audio track selector ────────────────────────────────────
+
+    /** Quét danh sách audio track có sẵn từ Player.Tracks (Media3 API chuẩn) */
+    private fun refreshAudioTracks() {
+        val p = player ?: return
+        val tracks = p.currentTracks
+        val list = mutableListOf<AudioTrackOption>()
+
+        tracks.groups.forEachIndexed { groupIdx, group ->
+            if (group.type != C.TRACK_TYPE_AUDIO) return@forEachIndexed
+            for (i in 0 until group.length) {
+                val format = group.getTrackFormat(i)
+                val lang  = format.language
+                val label = when {
+                    !lang.isNullOrBlank() -> "Track ${groupIdx + 1} · ${lang.uppercase()}"
+                    else                  -> "Track ${groupIdx + 1}"
+                }
+                list.add(AudioTrackOption(groupIdx, i, label))
+                if (group.isTrackSelected(i)) selectedAudioTrack = list.last()
+            }
+        }
+
+        audioTracks = list
+        // Chỉ hiện nút Audio nếu có từ 2 track trở lên (1 track thì không cần chọn)
+        binding.btnAudio.visibility = if (list.size > 1) View.VISIBLE else View.GONE
+    }
+
+    private fun showAudioTrackDialog() {
+        val p = player ?: return
+        if (audioTracks.isEmpty()) {
+            refreshAudioTracks()
+            if (audioTracks.isEmpty()) return
+        }
+
+        val labels = audioTracks.map { it.label }.toTypedArray()
+        val checkedIdx = audioTracks.indexOfFirst {
+            it.groupIndex == selectedAudioTrack?.groupIndex &&
+            it.trackIndex == selectedAudioTrack?.trackIndex
+        }.coerceAtLeast(0)
+
+        AlertDialog.Builder(this)
+            .setTitle("Chọn âm thanh")
+            .setSingleChoiceItems(labels, checkedIdx) { dialog, which ->
+                val chosen = audioTracks[which]
+                selectedAudioTrack = chosen
+
+                val tracks = p.currentTracks
+                val group  = tracks.groups.getOrNull(chosen.groupIndex)
+                if (group != null) {
+                    val override = TrackSelectionOverride(group.mediaTrackGroup, chosen.trackIndex)
+                    p.trackSelectionParameters = p.trackSelectionParameters
+                        .buildUpon()
+                        .setOverrideForType(override)
+                        .build()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
     }
 
     // ── Zoom ────────────────────────────────────────────────────
@@ -189,6 +300,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.btnQx.setImageResource(R.drawable.ic_qx_off)
         binding.qxPanel.visibility = View.GONE
         binding.tvQxSpeed.text = "1.0x"
+        currentSpeed = 1.0f
+        binding.tvSpeedLabel.text = "1.0x"
     }
 
     private fun updateQxUI(speed: Float, phase: Float) {
@@ -238,6 +351,8 @@ class VideoPlayerActivity : AppCompatActivity() {
         pbCountdownJob?.cancel(); pbCountdownJob = null
         binding.btnPb.setImageResource(R.drawable.ic_pb_off)
         binding.pbPanel.visibility = View.GONE
+        currentSpeed = 1.0f
+        binding.tvSpeedLabel.text = "1.0x"
     }
 
     /**
