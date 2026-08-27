@@ -28,6 +28,10 @@ object LoadingHelper {
     /**
      * Hiện shimmer skeleton cho RecyclerView.
      * Lưu adapter thật lại để restore sau.
+     *
+     * ✅ FIX: hoán đổi adapter/layoutManager qua rv.post{} — không bao giờ
+     * thực hiện giữa lúc RecyclerView đang computing layout/scroll (nguồn gốc
+     * lỗi "androidx.recyclerview..." thoáng qua khi search debounce dồn dập).
      */
     fun showShimmer(
         rv: RecyclerView,
@@ -36,28 +40,42 @@ object LoadingHelper {
     ) {
         if (rv.adapter is ShimmerAdapter) return   // đang shimmer rồi
 
-        // Lưu adapter + layout manager thật
-        savedAdapters[rv] = rv.adapter ?: return
-        savedManagers[rv] = rv.layoutManager
+        val realAdapter = rv.adapter ?: return
+        val realManager = rv.layoutManager
 
-        // Đặt layout manager đúng loại
-        val ctx = rv.context
-        rv.layoutManager = when (type) {
-            ShimmerType.GRID  -> GridLayoutManager(ctx, 3)
-            ShimmerType.MEDIA -> GridLayoutManager(ctx, 3)
-            else              -> LinearLayoutManager(ctx)
+        val doSwap = {
+            // Kiểm tra lại lần nữa phòng trường hợp state đã đổi trong lúc post{} đợi
+            if (rv.adapter !is ShimmerAdapter) {
+                savedAdapters[rv] = realAdapter
+                savedManagers[rv] = realManager
+
+                val ctx = rv.context
+                rv.layoutManager = when (type) {
+                    ShimmerType.GRID  -> GridLayoutManager(ctx, 3)
+                    ShimmerType.MEDIA -> GridLayoutManager(ctx, 3)
+                    else              -> LinearLayoutManager(ctx)
+                }
+                rv.adapter = ShimmerAdapter(itemCount, type)
+            }
         }
-        rv.adapter = ShimmerAdapter(itemCount, type)
+
+        if (rv.isComputingLayout) rv.post(doSwap) else doSwap()
     }
 
     /**
      * Ẩn shimmer, khôi phục adapter thật với fade-in.
      */
     fun hideShimmer(rv: RecyclerView) {
-        val real = savedAdapters.remove(rv) ?: return
-        rv.layoutManager = savedManagers.remove(rv) ?: LinearLayoutManager(rv.context)
-        rv.adapter = real
-        rv.startAnimation(AnimationUtils.loadAnimation(rv.context, R.anim.fade_in))
+        val real = savedAdapters[rv] ?: return
+
+        val doSwap = {
+            savedAdapters.remove(rv)
+            rv.layoutManager = savedManagers.remove(rv) ?: LinearLayoutManager(rv.context)
+            rv.adapter = real
+            rv.startAnimation(AnimationUtils.loadAnimation(rv.context, R.anim.fade_in))
+        }
+
+        if (rv.isComputingLayout) rv.post(doSwap) else doSwap()
     }
 
     // ── Overlay ─────────────────────────────────────────────────

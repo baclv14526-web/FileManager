@@ -265,6 +265,9 @@ class MainActivity : AppCompatActivity() {
             val query = binding.searchEditText.text?.toString() ?: ""
             if (loading) {
                 binding.progressBar.visibility = View.VISIBLE
+                // Ẩn FastScroller khi đang shimmer — tránh nó tính scroll
+                // trên adapter/layoutManager giả đang được hoán đổi
+                binding.fastScroller.visibility = View.INVISIBLE
                 val shimType = if (viewModel.isGridView.value == true)
                     ShimmerType.GRID else ShimmerType.LIST
                 LoadingHelper.showShimmer(binding.recyclerView, shimType, 10)

@@ -150,10 +150,16 @@ class FastScroller @JvmOverloads constructor(
     }
 
     private fun scrollToFraction(fraction: Float) {
-        val r  = rv ?: return
-        val total  = r.computeVerticalScrollRange()
-        val target = (fraction * total).roundToInt()
-        r.scrollBy(0, target - r.computeVerticalScrollOffset())
+        val r = rv ?: return
+        try {
+            if (r.layoutManager == null) return
+            val total  = r.computeVerticalScrollRange()
+            val target = (fraction * total).roundToInt()
+            r.scrollBy(0, target - r.computeVerticalScrollOffset())
+        } catch (e: Exception) {
+            // RecyclerView có thể đang giữa layout pass (VD: LoadingHelper
+            // hoán đổi adapter/layoutManager) — bỏ qua an toàn, không crash/toast.
+        }
     }
 
     // ── Draw ────────────────────────────────────────────────────
@@ -224,20 +230,27 @@ class FastScroller @JvmOverloads constructor(
     private fun syncThumb() {
         val r = rv ?: return
         if (height == 0) return
+        if (r.layoutManager == null) return   // giữa lúc swap layoutManager → bỏ qua
 
-        val trackTop    = pad
-        val trackBottom = height - pad
-        val trackH      = (trackBottom - trackTop).coerceAtLeast(1f)
+        try {
+            val trackTop    = pad
+            val trackBottom = height - pad
+            val trackH      = (trackBottom - trackTop).coerceAtLeast(1f)
 
-        val range  = r.computeVerticalScrollRange().coerceAtLeast(1)
-        val extent = r.computeVerticalScrollExtent().coerceAtLeast(0)
-        thumbH     = (extent.toFloat() / range * trackH).coerceAtLeast(thumbMin)
+            val range  = r.computeVerticalScrollRange().coerceAtLeast(1)
+            val extent = r.computeVerticalScrollExtent().coerceAtLeast(0)
+            thumbH     = (extent.toFloat() / range * trackH).coerceAtLeast(thumbMin)
 
-        val offset   = r.computeVerticalScrollOffset()
-        val fraction = offset.toFloat() / (range - extent).coerceAtLeast(1)
-        thumbTop     = trackTop + fraction * (trackH - thumbH)
+            val offset   = r.computeVerticalScrollOffset()
+            val fraction = offset.toFloat() / (range - extent).coerceAtLeast(1)
+            thumbTop     = trackTop + fraction * (trackH - thumbH)
 
-        invalidate()
+            invalidate()
+        } catch (e: Exception) {
+            // RecyclerView đang computing layout/scroll — bỏ qua an toàn.
+            // Đây là nguyên nhân của lỗi "androidx.recyclerview..." thoáng qua
+            // khi LoadingHelper hoán đổi adapter/layoutManager lúc search debounce.
+        }
     }
 
     // ── Alpha animation ─────────────────────────────────────────
