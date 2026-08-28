@@ -96,11 +96,6 @@ class TimelineActivity : AppCompatActivity() {
 
         viewModel.isLoading.observe(this) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
-            if (loading) {
-                LoadingHelper.showShimmer(binding.recyclerView, ShimmerType.MEDIA, 12)
-            } else {
-                LoadingHelper.hideShimmer(binding.recyclerView)
-            }
         }
 
         // Quan sát danh sách volumes để update UI

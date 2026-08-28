@@ -252,6 +252,18 @@ class MainActivity : AppCompatActivity() {
                     if (results.isEmpty()) View.VISIBLE else View.GONE
                 binding.emptyText.text =
                     if (results.isEmpty()) "Không tìm thấy kết quả" else ""
+            } else {
+                val currentFiles = viewModel.files.value ?: emptyList()
+                val query = binding.searchEditText.text?.toString() ?: ""
+                if (query.isEmpty()) {
+                    fileAdapter.submitList(currentFiles) {
+                        binding.fastScroller.setItems(currentFiles)
+                    }
+                    binding.emptyView.visibility =
+                        if (currentFiles.isEmpty()) View.VISIBLE else View.GONE
+                    binding.emptyText.text =
+                        if (currentFiles.isEmpty()) "Thư mục trống" else ""
+                }
             }
         }
 
@@ -262,19 +274,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.isLoading.observe(this) { loading ->
-            val query = binding.searchEditText.text?.toString() ?: ""
-            if (loading) {
-                binding.progressBar.visibility = View.VISIBLE
-                // Ẩn FastScroller khi đang shimmer — tránh nó tính scroll
-                // trên adapter/layoutManager giả đang được hoán đổi
-                binding.fastScroller.visibility = View.INVISIBLE
-                val shimType = if (viewModel.isGridView.value == true)
-                    ShimmerType.GRID else ShimmerType.LIST
-                LoadingHelper.showShimmer(binding.recyclerView, shimType, 10)
-            } else {
-                binding.progressBar.visibility = View.GONE
-                LoadingHelper.hideShimmer(binding.recyclerView)
-            }
+            binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
         }
 
         viewModel.isSelectionMode.observe(this) { selMode ->
