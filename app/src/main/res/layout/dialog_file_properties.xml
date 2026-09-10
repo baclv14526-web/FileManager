@@ -1,79 +1,292 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingHorizontal="24dp"
-    android:paddingBottom="8dp">
+    android:scrollbars="vertical">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Tên:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvName" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp" android:ellipsize="middle" android:maxLines="1"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="16dp">
+
+        <!-- Tên -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="6dp">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Tên:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"
+                android:textIsSelectable="true"/>
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
+
+        <!-- Đường dẫn -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:orientation="horizontal"
+            android:gravity="top"
+            android:paddingVertical="8dp">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Đường dẫn:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvPath"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="12sp"
+                android:textColor="?attr/colorOnSurface"
+                android:textIsSelectable="true"/>
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
+
+        <!-- Loại -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Loại:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvType"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
+
+        <!-- Kích thước -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Kích thước:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvSize"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
+
+        <!-- Ngày sửa -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Ngày sửa:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
+
+        <!-- Độ phân giải (cho Ảnh / Video) -->
+        <LinearLayout
+            android:id="@+id/rowResolution"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Độ phân giải:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvResolution"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View
+            android:id="@+id/divResolution"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/colorOutlineVariant"
+            android:visibility="gone"/>
+
+        <!-- Thời lượng (cho Video/Audio) -->
+        <LinearLayout
+            android:id="@+id/rowDuration"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Thời lượng:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvDuration"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View
+            android:id="@+id/divDuration"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/colorOutlineVariant"
+            android:visibility="gone"/>
+
+        <!-- Thiết bị chụp / Model (cho Ảnh/Video) -->
+        <LinearLayout
+            android:id="@+id/rowCamera"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Thiết bị:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvCamera"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
+        <View
+            android:id="@+id/divCamera"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/colorOutlineVariant"
+            android:visibility="gone"/>
+
+        <!-- Vị trí GPS / Location -->
+        <LinearLayout
+            android:id="@+id/rowLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="6dp"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="📍 Vị trí (GPS):"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorPrimary"/>
+            <TextView
+                android:id="@+id/tvLocation"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorPrimary"
+                android:textIsSelectable="true"/>
+        </LinearLayout>
+
+        <View
+            android:id="@+id/divLocation"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?attr/colorOutlineVariant"
+            android:visibility="gone"/>
+
+        <!-- Quyền Đọc / Ghi -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="110dp"
+                android:layout_height="wrap_content"
+                android:text="Quyền truy cập:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurfaceVariant"/>
+            <TextView
+                android:id="@+id/tvPermissions"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+        </LinearLayout>
+
     </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:gravity="top" android:minHeight="40dp"
-        android:paddingVertical="8dp">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Đường dẫn:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvPath" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="12sp" android:textIsSelectable="true"/>
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Loại:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvType" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp"/>
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Kích thước:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvSize" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp"/>
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Ngày sửa:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvDate" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp"/>
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Đọc được:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvReadable" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp"/>
-    </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorOutlineVariant"/>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
-        android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView android:layout_width="100dp" android:layout_height="wrap_content"
-            android:text="Ghi được:" android:textStyle="bold" android:textSize="13sp"/>
-        <TextView android:id="@+id/tvWritable" android:layout_width="0dp" android:layout_height="wrap_content"
-            android:layout_weight="1" android:textSize="13sp"/>
-    </LinearLayout>
-
-</LinearLayout>
+</ScrollView>
