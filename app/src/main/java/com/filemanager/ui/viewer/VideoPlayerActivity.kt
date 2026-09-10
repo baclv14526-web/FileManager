@@ -74,7 +74,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     // Speed selector — tự viết, không phụ thuộc PopupWindow ẩn của ExoPlayer
     // (nguồn gốc bug "chọn xong không mở lại được" trên một số thiết bị/Android 9)
-    private val speedPresets = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+    private val speedPresets = floatArrayOf(0.05f, 0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 4.0f)
     private var currentSpeed = 1.0f
 
     // Audio track selector
