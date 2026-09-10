@@ -145,7 +145,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val results = withContext(Dispatchers.IO) {
                     val raw = mutableListOf<FileItem>()
                     for (root in roots) {
-                        if (raw.size >= 500) break   // đủ kết quả — dừng sớm, không quét root tiếp theo
+                        if (raw.size >= 2000) break   // đủ kết quả — dừng sớm
                         raw += repository.searchFiles(query, root)
                     }
                     raw.distinctBy { it.path }

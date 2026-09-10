@@ -32,15 +32,9 @@ class FileRepository(private val context: Context) {
         }
 
     companion object {
-        // Giới hạn để search không bị "treo" khi quét toàn bộ storage root
-        private const val SEARCH_MAX_RESULTS = 500
-        private const val SEARCH_MAX_DEPTH   = 15
-        // Các thư mục hệ thống rất lớn, hiếm khi người dùng cần tìm bên trong,
-        // bỏ qua để search nhanh hơn nhiều lần
-        private val SEARCH_SKIP_DIRS = setOf(
-            "Android", ".thumbnails", ".cache", "cache",
-            "lost.dir", ".git", "node_modules"
-        )
+        // Giới hạn để search không gây OOM khi quét toàn bộ storage
+        private const val SEARCH_MAX_RESULTS = 2000
+        private const val SEARCH_MAX_DEPTH   = 25
     }
 
     suspend fun searchFiles(query: String, rootPath: String): List<FileItem> =
@@ -57,12 +51,8 @@ class FileRepository(private val context: Context) {
         }
 
     /**
-     * ✅ FIX: suspend fun + yield() định kỳ để coroutine cancellation hoạt động
-     * (trước đây là fun thường → khi user gõ ký tự mới, searchJob.cancel() không
-     * thể dừng vòng lặp đang chạy → kết quả cũ "trễ" đè lên kết quả mới).
-     *
-     * ✅ FIX: giới hạn SEARCH_MAX_RESULTS + SEARCH_MAX_DEPTH → tránh quét vô hạn
-     * khi scope mặc định là toàn bộ storage root lúc mới mở app.
+     * Duyệt đệ quy tìm kiếm toàn bộ file và folder (bao gồm cả thư mục hệ thống và ẩn)
+     * Sử dụng yield() để coroutine cancellation hoạt động khi người dùng thay đổi từ khoá
      */
     private suspend fun searchRecursive(
         dir: File, query: String, results: MutableList<FileItem>, depth: Int
@@ -81,10 +71,7 @@ class FileRepository(private val context: Context) {
 
                 if (file.name.lowercase().contains(query)) results.add(FileItem(file))
 
-                if (file.isDirectory &&
-                    !file.name.startsWith(".") &&
-                    file.name !in SEARCH_SKIP_DIRS
-                ) {
+                if (file.isDirectory) {
                     searchRecursive(file, query, results, depth + 1)
                 }
             }
