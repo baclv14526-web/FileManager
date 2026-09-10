@@ -49,6 +49,9 @@ class TimelineViewModel(private val app: Application) : AndroidViewModel(app) {
     var allImagePaths: List<String> = emptyList()
         private set
 
+    var allVideoPaths: List<String> = emptyList()
+        private set
+
     private var rawGrouped: LinkedHashMap<String, List<FileItem>> = linkedMapOf()
     private val expandedState: MutableMap<String, Boolean> = mutableMapOf()
     private var currentMediaType = TimelineMediaType.ALL
@@ -83,6 +86,11 @@ class TimelineViewModel(private val app: Application) : AndroidViewModel(app) {
 
                 allImagePaths = items
                     .filter { it.fileType == FileType.IMAGE }
+                    .sortedByDescending { it.lastModified }
+                    .map { it.path }
+
+                allVideoPaths = items
+                    .filter { it.fileType == FileType.VIDEO }
                     .sortedByDescending { it.lastModified }
                     .map { it.path }
 

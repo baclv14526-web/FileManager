@@ -454,7 +454,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openVideoPlayer(item: FileItem) {
+        val videos = viewModel.files.value
+            ?.filter { it.fileType == FileType.VIDEO }
+            ?.map { it.path } ?: listOf(item.path)
+        val index = videos.indexOf(item.path).coerceAtLeast(0)
         startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+            putStringArrayListExtra(VideoPlayerActivity.EXTRA_PLAYLIST, ArrayList(videos))
+            putExtra(VideoPlayerActivity.EXTRA_INDEX, index)
+            // Fallback for backward compat
             putExtra(VideoPlayerActivity.EXTRA_PATH, item.path)
         })
     }

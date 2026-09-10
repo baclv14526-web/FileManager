@@ -43,6 +43,16 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Quay lại"/>
 
+        <!-- Prev video button -->
+        <ImageButton
+            android:id="@+id/btnPrev"
+            android:layout_width="36dp"
+            android:layout_height="44dp"
+            android:src="@drawable/ic_skip_previous"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Video trước"
+            android:visibility="gone"/>
+
         <TextView
             android:id="@+id/tvTitle"
             android:layout_width="0dp"
@@ -53,6 +63,16 @@
             android:maxLines="1"
             android:ellipsize="middle"
             android:layout_marginHorizontal="8dp"/>
+
+        <!-- Next video button -->
+        <ImageButton
+            android:id="@+id/btnNext"
+            android:layout_width="36dp"
+            android:layout_height="44dp"
+            android:src="@drawable/ic_skip_next"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Video tiếp theo"
+            android:visibility="gone"/>
 
         <!-- PB Preview button -->
         <LinearLayout
@@ -177,6 +197,30 @@
             android:src="@drawable/ic_screen_rotation"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Xoay màn hình"/>
+
+        <!-- Repeat / Auto-replay button -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginStart="2dp">
+            <ImageButton
+                android:id="@+id/btnRepeat"
+                android:layout_width="36dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_repeat_off"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Lặp lại"/>
+            <TextView
+                android:id="@+id/tvRepeatLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Loop"
+                android:textColor="#CCFFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- ── Pb Preview Panel ────────────────────────────────────── -->

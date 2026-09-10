@@ -164,10 +164,15 @@ class TimelineActivity : AppCompatActivity() {
                         putExtra(ImageViewerActivity.EXTRA_INDEX, index - start)
                     })
                 }
-                FileType.VIDEO -> startActivity(
-                    Intent(this, VideoPlayerActivity::class.java).apply {
+                FileType.VIDEO -> {
+                    val videos = viewModel.allVideoPaths
+                    val index  = videos.indexOf(item.path).coerceAtLeast(0)
+                    startActivity(Intent(this, VideoPlayerActivity::class.java).apply {
+                        putStringArrayListExtra(VideoPlayerActivity.EXTRA_PLAYLIST, ArrayList(videos.ifEmpty { listOf(item.path) }))
+                        putExtra(VideoPlayerActivity.EXTRA_INDEX, index)
                         putExtra(VideoPlayerActivity.EXTRA_PATH, item.path)
                     })
+                }
                 else -> {}
             }
         } catch (e: Exception) {

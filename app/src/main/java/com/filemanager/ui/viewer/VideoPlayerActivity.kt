@@ -35,7 +35,11 @@ import java.util.Locale
 class VideoPlayerActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_PATH = "extra_path"
+        const val EXTRA_PATH     = "extra_path"
+        /** Optional: ArrayList<String> of all video paths in the current folder/list */
+        const val EXTRA_PLAYLIST = "extra_playlist"
+        /** Optional: index of the current video in EXTRA_PLAYLIST */
+        const val EXTRA_INDEX    = "extra_index"
     }
 
     private lateinit var binding: ActivityVideoPlayerBinding
@@ -43,6 +47,13 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var playWhenReady  = true
     private var currentPosition = 0L
     private var path = ""
+
+    // Playlist
+    private var playlist: ArrayList<String> = arrayListOf()
+    private var playlistIndex = 0
+
+    // Repeat mode: 0 = off, 1 = repeat-all, 2 = repeat-one
+    private var repeatMode = 0
 
     // Zoom
     private var isZoomed = false
@@ -80,10 +91,22 @@ class VideoPlayerActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         supportActionBar?.hide()
 
-        path = intent.getStringExtra(EXTRA_PATH) ?: run { finish(); return }
-        binding.tvTitle.text = File(path).name
+        // Support both single-path and playlist modes
+        val rawPlaylist = intent.getStringArrayListExtra(EXTRA_PLAYLIST)
+        val rawIndex    = intent.getIntExtra(EXTRA_INDEX, 0)
+        if (!rawPlaylist.isNullOrEmpty()) {
+            playlist      = rawPlaylist
+            playlistIndex = rawIndex.coerceIn(0, rawPlaylist.lastIndex)
+            path          = playlist[playlistIndex]
+        } else {
+            path = intent.getStringExtra(EXTRA_PATH) ?: run { finish(); return }
+            playlist      = arrayListOf(path)
+            playlistIndex = 0
+        }
+        updateTitle()
 
         setupButtons()
+        updateNavButtons()
         initPlayer()
     }
 
@@ -129,6 +152,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                     if (state == Player.STATE_ENDED) {
                         if (isQxActive) stopQx()
                         if (isPbActive) stopPb()
+                        handleVideoEnded()
                     }
                 }
                 // Được gọi khi track info sẵn sàng (thường ngay sau STATE_READY)
@@ -156,6 +180,12 @@ class VideoPlayerActivity : AppCompatActivity() {
     private fun setupButtons() {
         binding.btnBack.setOnClickListener { finish() }
 
+        binding.btnPrev.setOnClickListener { navigateVideo(-1) }
+        binding.btnNext.setOnClickListener { navigateVideo(+1) }
+
+        binding.btnRepeat.setOnClickListener { cycleRepeatMode() }
+        binding.btnRepeat.alpha = 0.5f  // starts dimmed = off
+
         binding.btnRotate.setOnClickListener {
             requestedOrientation =
                 if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
@@ -179,6 +209,100 @@ class VideoPlayerActivity : AppCompatActivity() {
         // nên KHÔNG BAO GIỜ bị kẹt "không mở lại được" như menu settings mặc định
         binding.btnSpeed.setOnClickListener { showSpeedDialog() }
         binding.btnAudio.setOnClickListener { showAudioTrackDialog() }
+    }
+
+    // ── Playlist navigation ──────────────────────────────────────
+
+    /** Navigate by delta (-1 = prev, +1 = next), wraps around when repeat-all is on */
+    private fun navigateVideo(delta: Int) {
+        val newIndex = playlistIndex + delta
+        when {
+            newIndex in playlist.indices -> playAtIndex(newIndex)
+            repeatMode == 1 -> {
+                // repeat-all: wrap around
+                playAtIndex(if (delta > 0) 0 else playlist.lastIndex)
+            }
+            // otherwise do nothing (already at edge)
+        }
+    }
+
+    private fun playAtIndex(index: Int) {
+        playlistIndex   = index
+        path            = playlist[index]
+        currentPosition = 0L
+        playWhenReady   = true
+        updateTitle()
+        updateNavButtons()
+        // Reset QX/Pb states
+        if (isQxActive) stopQx()
+        if (isPbActive) stopPb()
+        // Swap media item without recreating ExoPlayer
+        val p = player
+        if (p != null) {
+            p.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(path))))
+            p.seekTo(0)
+            p.playWhenReady = true
+            p.prepare()
+        } else {
+            initPlayer()
+        }
+    }
+
+    private fun handleVideoEnded() {
+        when (repeatMode) {
+            2 -> {
+                // repeat-one: replay current
+                player?.seekTo(0)
+                player?.play()
+            }
+            1 -> {
+                // repeat-all: advance to next (wraps)
+                val nextIndex = (playlistIndex + 1) % playlist.size
+                playAtIndex(nextIndex)
+            }
+            else -> {
+                // repeat-off: advance to next if exists, else stop
+                if (playlistIndex + 1 < playlist.size) {
+                    playAtIndex(playlistIndex + 1)
+                }
+                // else: let ExoPlayer stay at ended state
+            }
+        }
+    }
+
+    private fun updateTitle() {
+        binding.tvTitle.text = File(path).name
+    }
+
+    private fun updateNavButtons() {
+        val hasPlaylist = playlist.size > 1
+        binding.btnPrev.visibility = if (hasPlaylist) View.VISIBLE else View.GONE
+        binding.btnNext.visibility = if (hasPlaylist) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Cycles repeat mode: off (0) → repeat-all (1) → repeat-one (2) → off
+     * Updates button icon and label accordingly.
+     */
+    private fun cycleRepeatMode() {
+        repeatMode = (repeatMode + 1) % 3
+        when (repeatMode) {
+            0 -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_off)
+                binding.tvRepeatLabel.text = "Loop"
+                binding.btnRepeat.alpha = 0.5f
+            }
+            1 -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_on)
+                binding.tvRepeatLabel.text = "All"
+                binding.btnRepeat.alpha = 1.0f
+            }
+            2 -> {
+                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_on)
+                binding.tvRepeatLabel.text = "×1"
+                binding.btnRepeat.alpha = 1.0f
+            }
+        }
     }
 
     // ── Speed selector ──────────────────────────────────────────
