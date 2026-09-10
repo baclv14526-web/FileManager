@@ -702,7 +702,7 @@ class MainActivity : AppCompatActivity() {
         item: FileItem,
         newName: String,
         safUri: Uri,
-        dialog: android.app.AlertDialog
+        dialog: androidx.appcompat.app.AlertDialog
     ) {
         val repo = com.filemanager.data.repository.FileRepository(this)
         LoadingHelper.showOverlay(this, "Đang đổi tên...", newName)
