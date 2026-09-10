@@ -52,6 +52,9 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var playlist: ArrayList<String> = arrayListOf()
     private var playlistIndex = 0
 
+    // Loop mode (giống YouTube: mặc định tắt, khi bật thì phát hết tự replay video hiện tại)
+    private var isLooping = false
+
     // Zoom
     private var isZoomed = false
     enum class ZoomMode(val label: String) {
@@ -199,10 +202,30 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.btnQx.setOnClickListener { if (isPbActive) stopPb(); toggleQx() }
         binding.btnPb.setOnClickListener { if (isQxActive) stopQx(); togglePb() }
 
+        binding.btnLoop.setOnClickListener { toggleLoop() }
+        updateLoopUI()
+
         // Nút tốc độ — luôn mở dialog mới mỗi lần tap, không giữ state ẩn
         // nên KHÔNG BAO GIỜ bị kẹt "không mở lại được" như menu settings mặc định
         binding.btnSpeed.setOnClickListener { showSpeedDialog() }
         binding.btnAudio.setOnClickListener { showAudioTrackDialog() }
+    }
+
+    private fun toggleLoop() {
+        isLooping = !isLooping
+        updateLoopUI()
+    }
+
+    private fun updateLoopUI() {
+        if (isLooping) {
+            binding.btnLoop.setImageResource(R.drawable.ic_repeat_on)
+            binding.btnLoop.alpha = 1.0f
+            binding.tvLoopLabel.setTextColor(0xFF4CAF50.toInt()) // highlight green
+        } else {
+            binding.btnLoop.setImageResource(R.drawable.ic_repeat_off)
+            binding.btnLoop.alpha = 0.5f
+            binding.tvLoopLabel.setTextColor(0xCCFFFFFF.toInt())
+        }
     }
 
     // ── Playlist navigation ──────────────────────────────────────
@@ -238,12 +261,19 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun handleVideoEnded() {
-        // Video chạy xong thì dừng hẳn, không tự động loop hay auto play next
-        // Chỉ chuyển video hoặc play lại khi người dùng click vào nút yêu cầu (Prev/Next/Play)
-        player?.apply {
-            playWhenReady = false
-            seekTo(0)
-            pause()
+        if (isLooping) {
+            // Khi người dùng bấm nút Loop (bật lặp) → tự động phát lại video từ đầu
+            player?.apply {
+                seekTo(0)
+                play()
+            }
+        } else {
+            // Mặc định (không bật Loop): video chạy xong thì dừng hẳn, không tự next, không loop
+            player?.apply {
+                playWhenReady = false
+                seekTo(0)
+                pause()
+            }
         }
     }
 
