@@ -198,29 +198,6 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Xoay màn hình"/>
 
-        <!-- Repeat / Auto-replay button -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="44dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginStart="2dp">
-            <ImageButton
-                android:id="@+id/btnRepeat"
-                android:layout_width="36dp"
-                android:layout_height="28dp"
-                android:src="@drawable/ic_repeat_off"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Lặp lại"/>
-            <TextView
-                android:id="@+id/tvRepeatLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Loop"
-                android:textColor="#CCFFFFFF"
-                android:textSize="9sp"
-                android:fontFamily="monospace"/>
-        </LinearLayout>
     </LinearLayout>
 
     <!-- ── Pb Preview Panel ────────────────────────────────────── -->

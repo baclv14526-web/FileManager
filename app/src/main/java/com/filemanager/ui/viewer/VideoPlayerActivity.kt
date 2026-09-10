@@ -52,9 +52,6 @@ class VideoPlayerActivity : AppCompatActivity() {
     private var playlist: ArrayList<String> = arrayListOf()
     private var playlistIndex = 0
 
-    // Repeat mode: 0 = off, 1 = repeat-all, 2 = repeat-one
-    private var repeatMode = 0
-
     // Zoom
     private var isZoomed = false
     enum class ZoomMode(val label: String) {
@@ -183,9 +180,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.btnPrev.setOnClickListener { navigateVideo(-1) }
         binding.btnNext.setOnClickListener { navigateVideo(+1) }
 
-        binding.btnRepeat.setOnClickListener { cycleRepeatMode() }
-        binding.btnRepeat.alpha = 0.5f  // starts dimmed = off
-
         binding.btnRotate.setOnClickListener {
             requestedOrientation =
                 if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
@@ -213,16 +207,11 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     // ── Playlist navigation ──────────────────────────────────────
 
-    /** Navigate by delta (-1 = prev, +1 = next), wraps around when repeat-all is on */
+    /** Navigate by delta (-1 = prev, +1 = next) khi người dùng bấm nút Prev/Next */
     private fun navigateVideo(delta: Int) {
         val newIndex = playlistIndex + delta
-        when {
-            newIndex in playlist.indices -> playAtIndex(newIndex)
-            repeatMode == 1 -> {
-                // repeat-all: wrap around
-                playAtIndex(if (delta > 0) 0 else playlist.lastIndex)
-            }
-            // otherwise do nothing (already at edge)
+        if (newIndex in playlist.indices) {
+            playAtIndex(newIndex)
         }
     }
 
@@ -249,24 +238,12 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun handleVideoEnded() {
-        when (repeatMode) {
-            2 -> {
-                // repeat-one: replay current
-                player?.seekTo(0)
-                player?.play()
-            }
-            1 -> {
-                // repeat-all: advance to next (wraps)
-                val nextIndex = (playlistIndex + 1) % playlist.size
-                playAtIndex(nextIndex)
-            }
-            else -> {
-                // repeat-off: advance to next if exists, else stop
-                if (playlistIndex + 1 < playlist.size) {
-                    playAtIndex(playlistIndex + 1)
-                }
-                // else: let ExoPlayer stay at ended state
-            }
+        // Video chạy xong thì dừng hẳn, không tự động loop hay auto play next
+        // Chỉ chuyển video hoặc play lại khi người dùng click vào nút yêu cầu (Prev/Next/Play)
+        player?.apply {
+            playWhenReady = false
+            seekTo(0)
+            pause()
         }
     }
 
@@ -280,30 +257,6 @@ class VideoPlayerActivity : AppCompatActivity() {
         binding.btnNext.visibility = if (hasPlaylist) View.VISIBLE else View.GONE
     }
 
-    /**
-     * Cycles repeat mode: off (0) → repeat-all (1) → repeat-one (2) → off
-     * Updates button icon and label accordingly.
-     */
-    private fun cycleRepeatMode() {
-        repeatMode = (repeatMode + 1) % 3
-        when (repeatMode) {
-            0 -> {
-                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_off)
-                binding.tvRepeatLabel.text = "Loop"
-                binding.btnRepeat.alpha = 0.5f
-            }
-            1 -> {
-                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_on)
-                binding.tvRepeatLabel.text = "All"
-                binding.btnRepeat.alpha = 1.0f
-            }
-            2 -> {
-                binding.btnRepeat.setImageResource(R.drawable.ic_repeat_on)
-                binding.tvRepeatLabel.text = "×1"
-                binding.btnRepeat.alpha = 1.0f
-            }
-        }
-    }
 
     // ── Speed selector ──────────────────────────────────────────
 
