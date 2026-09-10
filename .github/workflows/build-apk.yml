@@ -76,7 +76,15 @@ jobs:
           retention-days: 7
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            -Pkotlin.incremental=false \
+            2>&1 | tee release_build_log.txt
+          echo "=== RELEASE KOTLIN/AAPT ERRORS ==="
+          grep -E "error:|warning:|\.kt:[0-9]|AAPT: error" release_build_log.txt | head -60 || true
 
       - name: Sign Release APK
         id: sign_apk
