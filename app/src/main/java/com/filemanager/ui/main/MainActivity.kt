@@ -706,7 +706,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         val repo = com.filemanager.data.repository.FileRepository(this)
         LoadingHelper.showOverlay(this, "Đang đổi tên...", newName)
-        androidx.lifecycle.lifecycleScope.launch {
+        lifecycleScope.launch {
             val result = repo.renameFile(item.file, newName, safUri)
             LoadingHelper.hideOverlay(this@MainActivity)
             if (result != null) {
