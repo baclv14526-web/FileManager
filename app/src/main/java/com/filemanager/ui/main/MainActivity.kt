@@ -81,9 +81,21 @@ class MainActivity : AppCompatActivity() {
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
+            // Kiểm tra user có chọn đúng ROOT thẻ SD không
+            // lastPathSegment dạng "volumeId:subpath" — subpath rỗng = đã chọn root
+            val segment = uri.lastPathSegment ?: ""
+            val subPath = if (segment.contains(':')) segment.substringAfter(':') else segment
+            if (subPath.isNotEmpty()) {
+                // User chọn thư mục con — cảnh báo nhưng vẫn dùng (sẽ giới hạn phạm vi)
+                Toast.makeText(
+                    this,
+                    "⚠️ Bạn chọn thư mục con, không phải root thẻ SD.\nChỉ xóa được file trong thư mục đó.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             sdSafUri = uri
             prefs.edit().putString(PREF_SD_SAF_URI, uri.toString()).apply()
-            // Thực hiện hành động đói hỏi SAF đã chờ
+            // Thực hiện hành động đợi SAF đã chờ
             pendingSafAction?.invoke(uri)
         } else {
             Toast.makeText(this, "Cần cấp quyền thẻ SD để xóa", Toast.LENGTH_LONG).show()
@@ -459,25 +471,53 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Thực hiện xóa file trên thẻ SD:
-     * - Nếu đã có SAF URI hợp lệ → xóa luôn
-     * - Nếu chưa có → mở ACTION_OPEN_DOCUMENT_TREE xin quyền, rồi xóa sau khi nhận được
+     * - Nếu đã có SAF URI hợp lệ và đúng volume → xóa luôn
+     * - Nếu chưa có hoặc sai volume → mở ACTION_OPEN_DOCUMENT_TREE xin quyền mới
      */
     private fun performSdCardDelete() {
         val existingUri = sdSafUri
-        // Kiểm tra URI đã lưu có còn quyền không
-        val hasValidUri = existingUri != null && contentResolver.persistedUriPermissions
+        // Kiểm tra URI đã lưu có còn quyền ghi không
+        val hasWritePermission = existingUri != null && contentResolver.persistedUriPermissions
             .any { it.uri == existingUri && it.isWritePermission }
-        if (hasValidUri && existingUri != null) {
+        // Kiểm tra thêm: URI phải có thể tìm thấy ít nhất 1 file của items cần xóa
+        // (đảm bảo URI trỏ đúng volume, không phải volume cũ)
+        val uriCoversFiles = hasWritePermission && existingUri != null &&
+            viewModel.getSelectedItems().any { item ->
+                // SAF URI lastPathSegment dạng "volumeId:subpath"
+                // File path dạng "/storage/volumeId/..."
+                val segment = existingUri.lastPathSegment ?: ""
+                val volumeId = segment.substringBefore(':')
+                item.path.contains("/storage/$volumeId/") ||
+                item.path.contains("/$volumeId/")
+            }
+
+        if (uriCoversFiles && existingUri != null) {
             viewModel.deleteSelectedDirectly(existingUri)
         } else {
-            // Cần xin quyền SAF
+            // Cần xin quyền SAF mới — xóa URI cũ để tránh dùng nhầm
+            if (!uriCoversFiles && existingUri != null) {
+                sdSafUri = null
+                prefs.edit().remove(PREF_SD_SAF_URI).apply()
+            }
             pendingSafAction = { uri -> viewModel.deleteSelectedDirectly(uri) }
-            Toast.makeText(
-                this,
-                "Chọn thư mục gốc của thẻ SD để cấp quyền xóa",
-                Toast.LENGTH_LONG
-            ).show()
-            safLauncher.launch(null)
+            // Hiện dialog hướng dẫn rõ ràng trước khi mở picker
+            MaterialAlertDialogBuilder(this)
+                .setTitle("📂 Cấp quyền thẻ SD")
+                .setMessage(
+                    "Để xóa file trên thẻ SD, Android yêu cầu bạn cấp quyền thủ công:\n\n" +
+                    "1. Nhấn OK để mở trình chọn thư mục\n" +
+                    "2. Chuyển sang vị trí Thẻ SD (MicroSD)\n" +
+                    "3. Chọn thư mục GỐC của thẻ SD (không chọn thư mục con)\n" +
+                    "4. Nhấn 'Cho phép' / 'Use this folder'"
+                )
+                .setPositiveButton("OK, mở trình chọn") { _, _ ->
+                    safLauncher.launch(null)
+                }
+                .setNegativeButton("Hủy") { _, _ ->
+                    pendingSafAction = null
+                    LoadingHelper.hideOverlay(this)
+                }
+                .show()
         }
     }
 
