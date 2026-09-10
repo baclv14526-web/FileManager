@@ -46,6 +46,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _searchResults   = MutableLiveData<List<FileItem>?>()
     val searchResults: LiveData<List<FileItem>?> = _searchResults
 
+    private val _searchDisplayItems = MutableLiveData<List<FileDisplayItem>?>()
+    val searchDisplayItems: LiveData<List<FileDisplayItem>?> = _searchDisplayItems
+
+    private val searchExpandedState = mutableMapOf<FileType, Boolean>()
+    private var rawSearchResults = listOf<FileItem>()
+
     private val _selectedFiles   = MutableLiveData<Set<String>>(emptySet())
     val selectedFiles: LiveData<Set<String>> = _selectedFiles
 
@@ -131,7 +137,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun search(query: String) {
         lastQuery = query
-        if (query.isBlank()) { _searchResults.value = null; return }
+        if (query.isBlank()) {
+            _searchResults.value = null
+            _searchDisplayItems.value = null
+            return
+        }
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
@@ -156,13 +166,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 .thenBy { it.name.lowercase() }
                         )
                 }
+                rawSearchResults = results
                 _searchResults.value = results
+                rebuildSearchDisplayItems()
             } catch (e: Exception) {
+                rawSearchResults = emptyList()
                 _searchResults.value = emptyList()
+                _searchDisplayItems.value = emptyList()
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun toggleSearchGroup(type: FileType) {
+        searchExpandedState[type] = !(searchExpandedState[type] ?: true)
+        rebuildSearchDisplayItems()
+    }
+
+    private fun rebuildSearchDisplayItems() {
+        if (_searchResults.value == null) {
+            _searchDisplayItems.value = null
+            return
+        }
+
+        val displayList = mutableListOf<FileDisplayItem>()
+        // Nhóm các file theo FileType
+        val grouped = rawSearchResults.groupBy { it.fileType }
+
+        grouped.forEach { (type, items) ->
+            val title = when (type) {
+                FileType.FOLDER   -> "📁 Thư mục"
+                FileType.IMAGE    -> "🖼️ Hình ảnh"
+                FileType.VIDEO    -> "🎬 Video"
+                FileType.AUDIO    -> "🎵 Âm thanh"
+                FileType.DOCUMENT -> "📄 Tài liệu"
+                FileType.ARCHIVE  -> "📦 File nén"
+                FileType.CODE     -> "💻 Mã nguồn"
+                FileType.APK      -> "🤖 Ứng dụng (APK)"
+                FileType.OTHER    -> "📎 Khác"
+            }
+            val isExpanded = searchExpandedState[type] ?: true
+            displayList.add(FileDisplayItem.Header(type, title, items.size, isExpanded))
+            if (isExpanded) {
+                items.forEach { displayList.add(FileDisplayItem.Item(it)) }
+            }
+        }
+
+        _searchDisplayItems.value = displayList
     }
 
     fun setSearchScope(scope: SearchScope) {
@@ -178,7 +229,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSearch() {
         lastQuery = ""
         searchJob?.cancel()
+        rawSearchResults = emptyList()
         _searchResults.value  = null
+        _searchDisplayItems.value = null
         _searchFileType.value = SearchFileType.ALL
     }
 
@@ -222,7 +275,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectAll() {
-        _selectedFiles.value = _files.value?.map { it.path }?.toSet() ?: emptySet()
+        val inSearch = _searchResults.value != null
+        val sourceList = if (inSearch) (_searchResults.value ?: emptyList()) else (_files.value ?: emptyList())
+        _selectedFiles.value = sourceList.map { it.path }.toSet()
         applySelection()
     }
 
@@ -232,24 +287,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         applySelection()
     }
 
-    /**
-     * ✅ FIX: applySelection chạy trên IO thread (map trên list lớn tốn CPU)
-     * Dùng postValue để trả về Main thread sau khi xong.
-     */
     private fun applySelection() {
-        val current  = _files.value ?: return
         val selected = _selectedFiles.value ?: emptySet()
-        if (selected.isEmpty() && current.none { it.isSelected }) return  // không thay đổi gì
+        val inSearch = _searchResults.value != null
 
-        viewModelScope.launch(Dispatchers.Default) {
-            val updated = current.map { it.copy(isSelected = it.path in selected) }
-            _files.postValue(updated)
+        if (inSearch) {
+            val updated = rawSearchResults.map { it.copy(isSelected = it.path in selected) }
+            rawSearchResults = updated
+            _searchResults.value = updated
+            rebuildSearchDisplayItems()
+        } else {
+            val current = _files.value ?: return
+            if (selected.isEmpty() && current.none { it.isSelected }) return
+            viewModelScope.launch(Dispatchers.Default) {
+                val updated = current.map { it.copy(isSelected = it.path in selected) }
+                _files.postValue(updated)
+            }
         }
     }
 
     fun getSelectedItems(): List<FileItem> {
         val selected = _selectedFiles.value ?: return emptyList()
-        return _files.value?.filter { it.path in selected } ?: emptyList()
+        val inSearch = _searchResults.value != null
+        val sourceList = if (inSearch) (_searchResults.value ?: emptyList()) else (_files.value ?: emptyList())
+        return sourceList.filter { it.path in selected }
     }
 
     // ── Trash ───────────────────────────────────────────────────
@@ -276,6 +337,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ── Helpers ─────────────────────────────────────────────────
 
     fun refresh() {
+        if (lastQuery.isNotBlank()) {
+            search(lastQuery)
+        }
         val path = _currentPath.value?.ifEmpty { null } ?: return
         loadFiles(path)
     }

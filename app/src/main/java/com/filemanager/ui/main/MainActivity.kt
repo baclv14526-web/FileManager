@@ -78,7 +78,8 @@ class MainActivity : AppCompatActivity() {
         fileAdapter = FileListAdapter(
             onItemClick = ::onFileItemClick,
             onItemLongClick = ::onFileItemLongClick,
-            onSelectionChange = ::onSelectionChange
+            onSelectionChange = ::onSelectionChange,
+            onHeaderToggle = { type -> viewModel.toggleSearchGroup(type) }
         )
         binding.recyclerView.apply {
             adapter = fileAdapter
@@ -88,6 +89,7 @@ class MainActivity : AppCompatActivity() {
             setItemViewCacheSize(20)
             recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_LIST, 20)
             recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_GRID, 20)
+            recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_HEADER, 10)
         }
         binding.fastScroller.attachToRecyclerView(binding.recyclerView)
     }
@@ -243,15 +245,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        viewModel.searchResults.observe(this) { results ->
-            if (results != null) {
-                fileAdapter.submitList(results) {
-                    binding.fastScroller.setItems(results)
+        viewModel.searchDisplayItems.observe(this) { displayItems ->
+            if (displayItems != null) {
+                fileAdapter.submitDisplayList(displayItems) {
+                    val rawFiles = viewModel.searchResults.value ?: emptyList()
+                    binding.fastScroller.setItems(rawFiles)
                 }
                 binding.emptyView.visibility =
-                    if (results.isEmpty()) View.VISIBLE else View.GONE
+                    if (displayItems.isEmpty()) View.VISIBLE else View.GONE
                 binding.emptyText.text =
-                    if (results.isEmpty()) "Không tìm thấy kết quả" else ""
+                    if (displayItems.isEmpty()) "Không tìm thấy kết quả" else ""
             } else {
                 val currentFiles = viewModel.files.value ?: emptyList()
                 val query = binding.searchEditText.text?.toString() ?: ""
@@ -329,8 +332,17 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.isGridView.observe(this) { isGrid ->
             binding.recyclerView.layoutManager =
-                if (isGrid) GridLayoutManager(this, 3)
-                else        LinearLayoutManager(this)
+                if (isGrid) {
+                    GridLayoutManager(this, 3).apply {
+                        spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                            override fun getSpanSize(position: Int): Int {
+                                return if (fileAdapter.isHeader(position)) 3 else 1
+                            }
+                        }
+                    }
+                } else {
+                    LinearLayoutManager(this)
+                }
             fileAdapter.setViewType(isGrid)
             invalidateOptionsMenu()
         }

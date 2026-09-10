@@ -22,36 +22,60 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.Executors
 
+// Sealed class đại diện cho item hiển thị trong danh sách file (Bao gồm FileItem thông thường hoặc Header nhóm khi search)
+sealed class FileDisplayItem {
+    data class Header(
+        val type: FileType,
+        val title: String,
+        val count: Int,
+        val isExpanded: Boolean = true
+    ) : FileDisplayItem()
+
+    data class Item(val file: FileItem) : FileDisplayItem()
+}
+
 class FileListAdapter(
     private val onItemClick: (FileItem) -> Unit,
     private val onItemLongClick: (FileItem) -> Unit,
-    private val onSelectionChange: (FileItem) -> Unit
+    private val onSelectionChange: (FileItem) -> Unit,
+    private val onHeaderToggle: ((FileType) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
-        const val VIEW_LIST = 0
-        const val VIEW_GRID = 1
+        const val VIEW_LIST   = 0
+        const val VIEW_GRID   = 1
+        const val VIEW_HEADER = 2
 
-        // ✅ FIX 1: DiffUtil chạy trên background thread qua AsyncListDiffer
-        // Tránh block UI khi list > 200 items
-        private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<FileItem>() {
-            override fun areItemsTheSame(old: FileItem, new: FileItem) =
-                old.path == new.path
-            override fun areContentsTheSame(old: FileItem, new: FileItem) =
-                old.isSelected == new.isSelected && old.lastModified == new.lastModified
-            override fun getChangePayload(old: FileItem, new: FileItem): Any? {
-                // Chỉ trả về payload khi chỉ thay đổi selection → tránh rebind toàn bộ
-                return if (old.isSelected != new.isSelected) "selection" else null
+        private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<FileDisplayItem>() {
+            override fun areItemsTheSame(old: FileDisplayItem, new: FileDisplayItem) = when {
+                old is FileDisplayItem.Header && new is FileDisplayItem.Header ->
+                    old.type == new.type
+                old is FileDisplayItem.Item && new is FileDisplayItem.Item ->
+                    old.file.path == new.file.path
+                else -> false
+            }
+
+            override fun areContentsTheSame(old: FileDisplayItem, new: FileDisplayItem) = when {
+                old is FileDisplayItem.Header && new is FileDisplayItem.Header ->
+                    old.title == new.title && old.count == new.count && old.isExpanded == new.isExpanded
+                old is FileDisplayItem.Item && new is FileDisplayItem.Item ->
+                    old.file.isSelected == new.file.isSelected && old.file.lastModified == new.file.lastModified
+                else -> false
+            }
+
+            override fun getChangePayload(old: FileDisplayItem, new: FileDisplayItem): Any? {
+                if (old is FileDisplayItem.Item && new is FileDisplayItem.Item) {
+                    return if (old.file.isSelected != new.file.isSelected) "selection" else null
+                }
+                return null
             }
         }
 
-        // ✅ FIX 2: Glide request options tối ưu cho Android 9
-        // RGB_565 dùng ít RAM hơn ARGB_8888 (50%), phù hợp danh sách dài
         private val GLIDE_THUMB_OPTIONS = RequestOptions()
-            .override(120, 120)                         // resize nhỏ, đủ cho thumbnail
-            .format(DecodeFormat.PREFER_RGB_565)        // ít RAM hơn 50%
-            .diskCacheStrategy(DiskCacheStrategy.RESOURCE) // cache sau khi resize
-            .dontAnimate()                              // bỏ animation khi scroll nhanh
+            .override(120, 120)
+            .format(DecodeFormat.PREFER_RGB_565)
+            .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+            .dontAnimate()
 
         private val GLIDE_GRID_OPTIONS = RequestOptions()
             .override(200, 200)
@@ -60,28 +84,34 @@ class FileListAdapter(
             .dontAnimate()
     }
 
-    // ✅ AsyncListDiffer với executor riêng — không dùng shared ForkJoin pool
     private val bgExecutor = Executors.newSingleThreadExecutor()
 
     init { setHasStableIds(true) }
+
     private val differ = AsyncListDiffer(
-        AdapterListUpdateCallback(this),    // Fix: cần AdapterListUpdateCallback, không phải this
+        AdapterListUpdateCallback(this),
         AsyncDifferConfig.Builder(DIFF_CALLBACK)
             .setBackgroundThreadExecutor(bgExecutor)
             .build()
     )
 
-    // ✅ FIX 3: SimpleDateFormat là thread-unsafe, dùng ThreadLocal
     private val sdf = ThreadLocal.withInitial {
         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     }
 
     private var isGridView = false
 
-    val currentList: List<FileItem> get() = differ.currentList
+    val currentDisplayList: List<FileDisplayItem> get() = differ.currentList
+
+    val currentList: List<FileItem>
+        get() = differ.currentList.mapNotNull { (it as? FileDisplayItem.Item)?.file }
+
+    fun submitDisplayList(list: List<FileDisplayItem>, callback: (() -> Unit)? = null) {
+        differ.submitList(list, callback)
+    }
 
     fun submitList(list: List<FileItem>, callback: (() -> Unit)? = null) {
-        differ.submitList(list, callback)
+        differ.submitList(list.map { FileDisplayItem.Item(it) }, callback)
     }
 
     fun setViewType(grid: Boolean) {
@@ -90,43 +120,61 @@ class FileListAdapter(
         notifyDataSetChanged()
     }
 
+    fun isHeader(position: Int): Boolean {
+        if (position < 0 || position >= itemCount) return false
+        return differ.currentList[position] is FileDisplayItem.Header
+    }
+
     override fun getItemCount() = differ.currentList.size
-    override fun getItemId(pos: Int) = differ.currentList[pos].path.hashCode().toLong()
-    override fun getItemViewType(pos: Int) = if (isGridView) VIEW_GRID else VIEW_LIST
+
+    override fun getItemId(pos: Int): Long {
+        return when (val item = differ.currentList[pos]) {
+            is FileDisplayItem.Header -> item.type.ordinal.toLong() * -1000L - 1L
+            is FileDisplayItem.Item   -> item.file.path.hashCode().toLong()
+        }
+    }
+
+    override fun getItemViewType(pos: Int): Int {
+        return when (differ.currentList[pos]) {
+            is FileDisplayItem.Header -> VIEW_HEADER
+            is FileDisplayItem.Item   -> if (isGridView) VIEW_GRID else VIEW_LIST
+        }
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inf = LayoutInflater.from(parent.context)
-        return if (viewType == VIEW_GRID)
-            GridViewHolder(ItemFileGridBinding.inflate(inf, parent, false))
-        else
-            ListViewHolder(ItemFileListBinding.inflate(inf, parent, false))
+        return when (viewType) {
+            VIEW_HEADER -> HeaderViewHolder(com.filemanager.databinding.ItemSearchGroupHeaderBinding.inflate(inf, parent, false))
+            VIEW_GRID   -> GridViewHolder(ItemFileGridBinding.inflate(inf, parent, false))
+            else        -> ListViewHolder(ItemFileListBinding.inflate(inf, parent, false))
+        }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val item = differ.currentList.getOrNull(position) ?: return
         when (holder) {
-            is ListViewHolder -> holder.bind(item)
-            is GridViewHolder -> holder.bind(item)
+            is HeaderViewHolder -> if (item is FileDisplayItem.Header) holder.bind(item)
+            is ListViewHolder   -> if (item is FileDisplayItem.Item) holder.bind(item.file)
+            is GridViewHolder   -> if (item is FileDisplayItem.Item) holder.bind(item.file)
         }
     }
 
-    // ✅ FIX 4: Partial bind — chỉ update checkbox khi payload = "selection"
-    // Tránh reload Glide image khi chỉ thay đổi check state
     override fun onBindViewHolder(
         holder: RecyclerView.ViewHolder, position: Int, payloads: List<Any>
     ) {
         if (payloads.isNotEmpty() && payloads[0] == "selection") {
             val item = differ.currentList.getOrNull(position) ?: return
-            when (holder) {
-                is ListViewHolder -> holder.bindSelection(item)
-                is GridViewHolder -> holder.bindSelection(item)
+            if (item is FileDisplayItem.Item) {
+                when (holder) {
+                    is ListViewHolder -> holder.bindSelection(item.file)
+                    is GridViewHolder -> holder.bindSelection(item.file)
+                }
             }
         } else {
             super.onBindViewHolder(holder, position, payloads)
         }
     }
 
-    // ✅ FIX 5: Giải phóng Glide khi ViewHolder bị recycle
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
         when (holder) {
@@ -135,12 +183,31 @@ class FileListAdapter(
         }
     }
 
-    // ✅ Dừng load Glide khi view detach (scroll quá nhanh)
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
         super.onViewDetachedFromWindow(holder)
         holder.itemView.clearAnimation()
     }
 
+    // ── Header ViewHolder ────────────────────────────────────────
+
+    inner class HeaderViewHolder(val binding: com.filemanager.databinding.ItemSearchGroupHeaderBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(header: FileDisplayItem.Header) {
+            binding.tvGroupTitle.text = header.title
+            binding.tvCount.text = "${header.count} mục"
+
+            binding.ivChevron.rotation = if (header.isExpanded) 0f else -90f
+            binding.ivChevron.setImageResource(
+                if (header.isExpanded) R.drawable.ic_chevron_down
+                else R.drawable.ic_chevron_right
+            )
+
+            binding.root.setOnClickListener {
+                onHeaderToggle?.invoke(header.type)
+            }
+        }
+    }
 
     // ── List ViewHolder ──────────────────────────────────────────
 
