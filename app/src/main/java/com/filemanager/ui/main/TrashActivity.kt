@@ -54,12 +54,15 @@ class TrashActivity : AppCompatActivity() {
     }
 
     private fun loadTrashFiles() {
+        binding.loadingSpinner.visibility = View.VISIBLE
+        binding.emptyView.visibility = View.GONE
         lifecycleScope.launch {
             val trashDir = File(getExternalFilesDir(null), ".trash")
             trashItems = withContext(Dispatchers.IO) {
                 if (!trashDir.exists()) emptyList()
                 else trashDir.listFiles()?.map { FileItem(it) } ?: emptyList()
             }
+            binding.loadingSpinner.visibility = View.GONE
             adapter.submitList(trashItems)
             binding.emptyView.visibility = if (trashItems.isEmpty()) View.VISIBLE else View.GONE
             binding.tvCount.text = "${trashItems.size} mục trong thùng rác"

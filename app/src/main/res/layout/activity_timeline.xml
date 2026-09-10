@@ -185,6 +185,15 @@
             android:layout_gravity="end"
             android:alpha="0"/>
 
+        <!-- Center Loading Spinner -->
+        <ProgressBar
+            android:id="@+id/loadingSpinner"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="?attr/colorPrimary"
+            android:visibility="gone"/>
+
     </FrameLayout>
 
     <LinearLayout

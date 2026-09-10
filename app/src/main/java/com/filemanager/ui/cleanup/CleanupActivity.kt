@@ -88,7 +88,8 @@ class CleanupActivity : AppCompatActivity() {
         }
 
         viewModel.isScanning.observe(this) { scanning ->
-            if (scanning) LoadingHelper.showOverlay(this, "Đang quét bộ nhớ...", "Vui lòng chờ")
+            binding.loadingSpinner.visibility = if (scanning) View.VISIBLE else View.GONE
+            if (scanning) LoadingHelper.showOverlay(this, "Đang xử lý...", "Vui lòng chờ")
             else          LoadingHelper.hideOverlay(this)
         }
 

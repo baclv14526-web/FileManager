@@ -84,7 +84,8 @@ class TimelineActivity : AppCompatActivity() {
     private fun setupObservers() {
         viewModel.timelineItems.observe(this) { items ->
             adapter.submitList(items)
-            binding.emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+            val isLoading = viewModel.isLoading.value == true
+            binding.emptyView.visibility = if (items.isEmpty() && !isLoading) View.VISIBLE else View.GONE
             // Tạo labels cho FastScroller: vị trí header → tên tháng
             val labels = items.mapIndexedNotNull { idx, item ->
                 if (item is TimelineListItem.Header)
@@ -96,6 +97,10 @@ class TimelineActivity : AppCompatActivity() {
 
         viewModel.isLoading.observe(this) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+            binding.loadingSpinner.visibility = if (loading) View.VISIBLE else View.GONE
+            if (loading) {
+                binding.emptyView.visibility = View.GONE
+            }
         }
 
         // Quan sát danh sách volumes để update UI

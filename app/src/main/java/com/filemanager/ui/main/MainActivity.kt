@@ -283,21 +283,23 @@ class MainActivity : AppCompatActivity() {
                 fileAdapter.submitList(files) {
                     binding.fastScroller.setItems(files)
                 }
+                val isLoading = viewModel.isLoading.value == true
                 binding.emptyView.visibility =
-                    if (files.isEmpty()) View.VISIBLE else View.GONE
+                    if (files.isEmpty() && !isLoading) View.VISIBLE else View.GONE
             }
         }
 
         viewModel.searchDisplayItems.observe(this) { displayItems ->
+            val isLoading = viewModel.isLoading.value == true
             if (displayItems != null) {
                 fileAdapter.submitDisplayList(displayItems) {
                     val rawFiles = viewModel.searchResults.value ?: emptyList()
                     binding.fastScroller.setItems(rawFiles)
                 }
                 binding.emptyView.visibility =
-                    if (displayItems.isEmpty()) View.VISIBLE else View.GONE
+                    if (displayItems.isEmpty() && !isLoading) View.VISIBLE else View.GONE
                 binding.emptyText.text =
-                    if (displayItems.isEmpty()) "Không tìm thấy kết quả" else ""
+                    if (displayItems.isEmpty() && !isLoading) "Không tìm thấy kết quả" else ""
             } else {
                 val currentFiles = viewModel.files.value ?: emptyList()
                 val query = binding.searchEditText.text?.toString() ?: ""
@@ -306,9 +308,9 @@ class MainActivity : AppCompatActivity() {
                         binding.fastScroller.setItems(currentFiles)
                     }
                     binding.emptyView.visibility =
-                        if (currentFiles.isEmpty()) View.VISIBLE else View.GONE
+                        if (currentFiles.isEmpty() && !isLoading) View.VISIBLE else View.GONE
                     binding.emptyText.text =
-                        if (currentFiles.isEmpty()) "Thư mục trống" else ""
+                        if (currentFiles.isEmpty() && !isLoading) "Thư mục trống" else ""
                 }
             }
         }
@@ -321,6 +323,10 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.isLoading.observe(this) { loading ->
             binding.progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+            binding.loadingSpinner.visibility = if (loading) View.VISIBLE else View.GONE
+            if (loading) {
+                binding.emptyView.visibility = View.GONE
+            }
         }
 
         viewModel.isSelectionMode.observe(this) { selMode ->
@@ -699,8 +705,10 @@ class MainActivity : AppCompatActivity() {
         dialog: android.app.AlertDialog
     ) {
         val repo = com.filemanager.data.repository.FileRepository(this)
+        LoadingHelper.showOverlay(this, "Đang đổi tên...", newName)
         androidx.lifecycle.lifecycleScope.launch {
             val result = repo.renameFile(item.file, newName, safUri)
+            LoadingHelper.hideOverlay(this@MainActivity)
             if (result != null) {
                 viewModel.refresh()
                 Toast.makeText(this@MainActivity, "Đã đổi tên thành \"$newName\"", Toast.LENGTH_SHORT).show()
