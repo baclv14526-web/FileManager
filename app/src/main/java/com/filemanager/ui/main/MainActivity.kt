@@ -37,6 +37,7 @@ import com.filemanager.utils.FastScroller
 import com.filemanager.utils.LoadingHelper
 import com.filemanager.utils.ShimmerType
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.lifecycle.lifecycleScope
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -634,17 +635,70 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss()
                     return@setOnClickListener
                 }
-                val dest = File(item.file.parent, newName)
-                if (item.file.renameTo(dest)) {
-                    viewModel.refresh()
-                    Toast.makeText(this, "Đã đổi tên", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
+                // Kiểm tra tên đã tồn tại
+                val destCheck = File(item.file.parent, newName)
+                if (destCheck.exists()) {
+                    dialogBinding.textInputLayout.error = "Tên này đã tồn tại"
+                    return@setOnClickListener
+                }
+
+                val onSdCard = com.filemanager.data.repository.FileRepository(this)
+                    .isSdCardFile(item.file)
+
+                if (onSdCard) {
+                    // Thẻ SD: cần SAF URI
+                    val existingUri = sdSafUri
+                    val hasValidUri = existingUri != null && contentResolver.persistedUriPermissions
+                        .any { it.uri == existingUri && it.isWritePermission }
+
+                    if (hasValidUri && existingUri != null) {
+                        // Có quyền rồi → đổi tên luôn
+                        doRenameWithSaf(item, newName, existingUri, dialog)
+                    } else {
+                        // Chưa có quyền → xin SAF rồi đổi tên
+                        pendingSafAction = { uri -> doRenameWithSaf(item, newName, uri, dialog) }
+                        dialog.dismiss()
+                        Toast.makeText(
+                            this,
+                            "Chọn thư mục gốc của thẻ SD để cấp quyền đổi tên",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        safLauncher.launch(null)
+                    }
                 } else {
-                    dialogBinding.textInputLayout.error = "Không thể đổi tên (file đã tồn tại)"
+                    // Bộ nhớ trong: renameTo thông thường
+                    val dest = File(item.file.parent, newName)
+                    if (item.file.renameTo(dest)) {
+                        viewModel.refresh()
+                        Toast.makeText(this, "Đã đổi tên thành \"$newName\"", Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                    } else {
+                        dialogBinding.textInputLayout.error = "Không thể đổi tên"
+                    }
                 }
             }
         }
         dialog.show()
+    }
+
+    /** Thực hiện đổi tên qua SAF, chạy trong lifecycleScope để có coroutine */
+    private fun doRenameWithSaf(
+        item: FileItem,
+        newName: String,
+        safUri: Uri,
+        dialog: android.app.AlertDialog
+    ) {
+        val repo = com.filemanager.data.repository.FileRepository(this)
+        androidx.lifecycle.lifecycleScope.launch {
+            val result = repo.renameFile(item.file, newName, safUri)
+            if (result != null) {
+                viewModel.refresh()
+                Toast.makeText(this@MainActivity, "Đã đổi tên thành \"$newName\"", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            } else {
+                Toast.makeText(this@MainActivity, "Không thể đổi tên trên thẻ SD", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun showSortDialog(): Boolean {

@@ -207,6 +207,36 @@ class FileRepository(private val context: Context) {
         return !file.absolutePath.startsWith(internalRoot)
     }
 
+    /**
+     * Đổi tên file/folder.
+     * - Bộ nhớ trong: dùng File.renameTo() thông thường.
+     * - Thẻ SD: phải dùng SAF DocumentFile.renameTo() vì Android chặn ghi thẳng.
+     * @param file      File cần đổi tên
+     * @param newName   Tên mới (chỉ tên, không phải đường dẫn đầy đủ)
+     * @param sdTreeUri URI quyền SAF từ ACTION_OPEN_DOCUMENT_TREE (chỉ cần khi file trên thẻ SD)
+     * @return File sau khi đổi tên, hoặc null nếu thất bại
+     */
+    suspend fun renameFile(
+        file: File,
+        newName: String,
+        sdTreeUri: Uri? = null
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            if (sdTreeUri != null && isSdCardFile(file)) {
+                // Đổi tên qua SAF (thẻ SD)
+                val docFile = DocumentFile.fromTreeUri(context, sdTreeUri)
+                    ?.findFileByPath(file) ?: return@withContext null
+                if (docFile.renameTo(newName)) {
+                    File(file.parent, newName)
+                } else null
+            } else {
+                // Bộ nhớ trong: renameTo thông thường
+                val dest = File(file.parent, newName)
+                if (file.renameTo(dest)) dest else null
+            }
+        } catch (e: Exception) { null }
+    }
+
     fun sortFiles(files: List<FileItem>, sortType: SortType): List<FileItem> {
         val (folders, regularFiles) = files.partition { it.isDirectory }
         val sortedFolders = when (sortType) {
