@@ -135,8 +135,36 @@ class FileRepository(private val context: Context) {
             val trashDir = File(context.getExternalFilesDir(null), ".trash")
                 .also { it.mkdirs() }
             files.all { item ->
+                val src = item.file
+                if (!src.exists()) return@all false
                 val dest = File(trashDir, "${System.currentTimeMillis()}_${item.name}")
-                item.file.renameTo(dest)
+                // 1. Thử rename trước (nhanh nhất đối với cùng partition bộ nhớ trong)
+                if (src.renameTo(dest)) {
+                    true
+                } else {
+                    // 2. Nếu rename thất bại (cross-filesystem giữa thẻ SD và bộ nhớ trong), thực hiện copy & delete
+                    val copyOk = if (src.isDirectory) {
+                        src.copyRecursively(dest, overwrite = true)
+                    } else {
+                        try {
+                            src.inputStream().use { input ->
+                                dest.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            true
+                        } catch (e: Exception) {
+                            false
+                        }
+                    }
+
+                    if (copyOk) {
+                        src.deleteRecursively()
+                    } else {
+                        dest.deleteRecursively()
+                        false
+                    }
+                }
             }
         } catch (e: Exception) { false }
     }

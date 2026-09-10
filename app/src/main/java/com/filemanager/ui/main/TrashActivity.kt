@@ -108,7 +108,7 @@ class TrashActivity : AppCompatActivity() {
             .setPositiveButton("Xóa") { _, _ ->
                 LoadingHelper.showOverlay(this, "Đang xóa vĩnh viễn...")
                 lifecycleScope.launch(Dispatchers.IO) {
-                    toDelete.forEach { it.file.delete() }
+                    toDelete.forEach { it.file.deleteRecursively() }
                     withContext(Dispatchers.Main) {
                         LoadingHelper.hideOverlay(this@TrashActivity)
                         selectedPaths.clear()
@@ -127,7 +127,7 @@ class TrashActivity : AppCompatActivity() {
             .setMessage("Xóa vĩnh viễn tất cả ${trashItems.size} mục? Không thể hoàn tác.")
             .setPositiveButton("Dọn sạch") { _, _ ->
                 lifecycleScope.launch(Dispatchers.IO) {
-                    trashItems.forEach { it.file.delete() }
+                    trashItems.forEach { it.file.deleteRecursively() }
                     withContext(Dispatchers.Main) {
                         selectedPaths.clear()
                         Toast.makeText(this@TrashActivity, "Đã dọn thùng rác", Toast.LENGTH_SHORT).show()

@@ -150,7 +150,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     raw.distinctBy { it.path }
                         .filter { fileType.matches(it) }
-                        .sortedWith(compareBy({ it.fileType.ordinal }, { it.name.lowercase() }))
+                        .sortedWith(
+                            compareBy<FileItem> { it.fileType.ordinal }
+                                .thenByDescending { it.lastModified }
+                                .thenBy { it.name.lowercase() }
+                        )
                 }
                 _searchResults.value = results
             } catch (e: Exception) {
