@@ -40,6 +40,14 @@ android {
         viewBinding true
     }
 
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def buildNumber = project.findProperty("buildNumber") ?: (System.getenv("BUILD_NUMBER") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "")
+            def buildNumberStr = buildNumber ? "-v${buildNumber}" : ""
+            outputFileName = "filemanager${buildNumberStr}-${variant.buildType.name}.apk"
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
