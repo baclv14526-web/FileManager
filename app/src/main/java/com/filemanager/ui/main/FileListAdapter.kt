@@ -293,9 +293,8 @@ class FileListAdapter(
         }
     }
 
-    // ── Helpers ──────────────────────────────────────────────────
-
-    private fun isSelectionMode() = differ.currentList.any { item -> item.isSelected }
+    private fun isSelectionMode(): Boolean =
+        differ.currentList.any { it is FileDisplayItem.Item && it.file.isSelected }
 
     private fun iconRes(type: FileType, isDir: Boolean) = when {
         isDir                   -> R.drawable.ic_folder
