@@ -1,6 +1,7 @@
 package com.filemanager.ui.main
 
 import android.app.Application
+import android.net.Uri
 import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 enum class SearchScope { CURRENT, INTERNAL, SD_CARD, ALL }
 
@@ -323,6 +325,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val ok = withContext(Dispatchers.IO) { repository.moveToTrash(items) }
                 if (ok) {
                     _toastMessage.value = "Đã chuyển ${items.size} mục vào thùng rác"
+                    exitSelectionMode()
+                    refresh()
+                } else {
+                    _toastMessage.value = "Không thể xóa một số file"
+                }
+            } catch (e: Exception) {
+                _toastMessage.value = "Lỗi: ${e.message}"
+            }
+        }
+    }
+
+    // ── Xóa vĩnh viễn (không vào thùng rác) ────────────────────
+
+    /** true nếu bất kỳ item nào đang được chọn nằm trên thẻ SD */
+    fun hasAnySelectedOnSdCard(): Boolean {
+        val items = getSelectedItems()
+        return items.any { repository.isSdCardFile(File(it.path)) }
+    }
+
+    /** Xóa vĩnh viễn các item đang được chọn, không qua thùng rác.
+     *  sdTreeUri: URI quyền SAF từ ACTION_OPEN_DOCUMENT_TREE (null nếu tất cả trên bộ nhớ trong) */
+    fun deleteSelectedDirectly(sdTreeUri: Uri?) {
+        val items = getSelectedItems()
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val ok = withContext(Dispatchers.IO) {
+                    repository.deleteFilesDirectly(items, sdTreeUri)
+                }
+                if (ok) {
+                    _toastMessage.value = "Đã xóa ${items.size} mục vĩnh viễn"
                     exitSelectionMode()
                     refresh()
                 } else {

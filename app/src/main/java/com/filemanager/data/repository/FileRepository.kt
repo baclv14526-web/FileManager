@@ -1,8 +1,10 @@
 package com.filemanager.data.repository
 
 import android.content.Context
+import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.documentfile.provider.DocumentFile
 import com.filemanager.data.model.FileItem
 import com.filemanager.data.model.SortType
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +171,42 @@ class FileRepository(private val context: Context) {
         } catch (e: Exception) { false }
     }
 
+    /**
+     * Xóa thẳng file/folder mà không vào thùng rác, dùng SAF DocumentFile cho thẻ SD.
+     * @param files  Danh sách file cần xóa
+     * @param sdTreeUri  URI quyền từ ACTION_OPEN_DOCUMENT_TREE (chỉ cần khi file nằm trên thẻ SD)
+     * @return true nếu tất cả xóa thành công
+     */
+    suspend fun deleteFilesDirectly(
+        files: List<FileItem>,
+        sdTreeUri: Uri? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        files.all { item ->
+            try {
+                val src = item.file
+                if (!src.exists()) return@all true  // đã không còn tồn tại → coi như thành công
+
+                if (sdTreeUri != null && isSdCardFile(src)) {
+                    // Xóa qua SAF DocumentFile (thẻ SD cần quyền đặc biệt)
+                    val docFile = DocumentFile.fromTreeUri(context, sdTreeUri)
+                        ?.findFileByPath(src) ?: return@all false
+                    docFile.delete()
+                } else {
+                    // Bộ nhớ trong: xóa thẳng qua java.io.File
+                    src.deleteRecursively()
+                }
+            } catch (e: Exception) { false }
+        }
+    }
+
+    /** Kiểm tra file có nằm trên thẻ SD (removable storage) không */
+    fun isSdCardFile(file: File): Boolean {
+        val internalRoot = try {
+            Environment.getExternalStorageDirectory().absolutePath
+        } catch (e: Exception) { "/storage/emulated/0" }
+        return !file.absolutePath.startsWith(internalRoot)
+    }
+
     fun sortFiles(files: List<FileItem>, sortType: SortType): List<FileItem> {
         val (folders, regularFiles) = files.partition { it.isDirectory }
         val sortedFolders = when (sortType) {
@@ -209,3 +247,34 @@ class FileRepository(private val context: Context) {
 }
 
 enum class TimelineMediaType { IMAGES, VIDEOS, ALL }
+
+/**
+ * Tìm DocumentFile tương ứng với java.io.File trong cây thư mục SAF.
+ * DocumentFile.fromTreeUri() chỉ trả về root của volume, cần navigate xuống theo path.
+ */
+private fun DocumentFile.findFileByPath(target: File): DocumentFile? {
+    // Lấy path tương đối từ root document
+    val treePath = this.uri.lastPathSegment ?: return null
+    // Tách phần volume id ví dụ "1234-ABCD:" khỏi path
+    val volumeSeparator = treePath.indexOf(':')
+    val treeRoot = if (volumeSeparator >= 0) treePath.substring(volumeSeparator + 1) else treePath
+
+    val targetPath = target.absolutePath
+    // Xác định phần path tương đối so với root volume của thẻ SD
+    // Ví dụ: /storage/1234-ABCD/DCIM/photo.jpg → DCIM/photo.jpg
+    val storageIndex = targetPath.indexOf("/storage/")
+    if (storageIndex < 0) return null
+    val afterStorage = targetPath.substring(storageIndex + "/storage/".length)
+    // bỏ qua volume id (1234-ABCD/)
+    val slashAfterVolume = afterStorage.indexOf('/')
+    val relativePath = if (slashAfterVolume >= 0) afterStorage.substring(slashAfterVolume + 1) else ""
+
+    if (relativePath.isEmpty()) return this
+
+    var current: DocumentFile = this
+    for (segment in relativePath.split('/')) {
+        if (segment.isEmpty()) continue
+        current = current.findFile(segment) ?: return null
+    }
+    return current
+}

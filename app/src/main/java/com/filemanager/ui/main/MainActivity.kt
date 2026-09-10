@@ -2,6 +2,7 @@ package com.filemanager.ui.main
 
 import android.Manifest
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -44,6 +45,13 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
     private lateinit var fileAdapter: FileListAdapter
 
+    // SharedPreferences lưu SAF tree URI đã được cấp quyền
+    private lateinit var prefs: SharedPreferences
+    // SAF tree URI được lưu để xóa file trên thẻ SD
+    private var sdSafUri: Uri? = null
+    // Callback sau khi nhận được SAF URI (thường gọi deleteSelectedDirectly)
+    private var pendingSafAction: ((Uri) -> Unit)? = null
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -60,11 +68,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // SAF launcher — nhận quyền ghi thẻ SD từ ACTION_OPEN_DOCUMENT_TREE
+    private val safLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            // Lưu quyền tồn tại qua reboot
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            sdSafUri = uri
+            prefs.edit().putString(PREF_SD_SAF_URI, uri.toString()).apply()
+            // Thực hiện hành động đói hỏi SAF đã chờ
+            pendingSafAction?.invoke(uri)
+        } else {
+            Toast.makeText(this, "Cần cấp quyền thẻ SD để xóa", Toast.LENGTH_LONG).show()
+        }
+        pendingSafAction = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
+
+        prefs = getSharedPreferences("fm_prefs", MODE_PRIVATE)
+        // Khôi phục SAF URI đã lưu từ lần trước
+        prefs.getString(PREF_SD_SAF_URI, null)?.let { sdSafUri = Uri.parse(it) }
 
         setupRecyclerView()
         setupSearch()
@@ -378,19 +410,57 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnDelete.setOnClickListener {
             val items = viewModel.getSelectedItems()
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Xóa vào thùng rác")
-                .setMessage("Chuyển ${items.size} mục vào thùng rác?")
-                .setPositiveButton("Xóa") { _, _ ->
-                    LoadingHelper.showOverlay(this, "Đang xóa...", "${items.size} mục")
-                    viewModel.moveSelectedToTrash()
-                }
-                .setNegativeButton("Hủy", null)
-                .show()
+            if (viewModel.hasAnySelectedOnSdCard()) {
+                // Có file trên thẻ SD — xóa thẳng, không qua thùng rác
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("⚠️ Xóa vĩnh viễn")
+                    .setMessage("Đây là file trên thẻ SD, không thể vào thùng rác.\nXóa ${items.size} mục vĩnh viễn?")
+                    .setPositiveButton("Xóa") { _, _ ->
+                        LoadingHelper.showOverlay(this, "Đang xóa...", "${items.size} mục")
+                        performSdCardDelete()
+                    }
+                    .setNegativeButton("Hủy", null)
+                    .show()
+            } else {
+                // Bộ nhớ trong — vào thùng rác như cũ
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("Xóa vào thùng rác")
+                    .setMessage("Chuyển ${items.size} mục vào thùng rác?")
+                    .setPositiveButton("Xóa") { _, _ ->
+                        LoadingHelper.showOverlay(this, "Đang xóa...", "${items.size} mục")
+                        viewModel.moveSelectedToTrash()
+                    }
+                    .setNegativeButton("Hủy", null)
+                    .show()
+            }
         }
         binding.btnSelectAll.setOnClickListener { viewModel.selectAll() }
         binding.btnCancelSelection.setOnClickListener { viewModel.exitSelectionMode() }
         binding.btnShare.setOnClickListener { shareSelectedFiles() }
+    }
+
+    /**
+     * Thực hiện xóa file trên thẻ SD:
+     * - Nếu đã có SAF URI hợp lệ → xóa luôn
+     * - Nếu chưa có → mở ACTION_OPEN_DOCUMENT_TREE xin quyền, rồi xóa sau khi nhận được
+     */
+    private fun performSdCardDelete() {
+        val existingUri = sdSafUri
+        // Kiểm tra URI đã lưu có còn quyền không
+        val hasValidUri = existingUri != null && contentResolver.persistedUriPermissions
+            .any { it.uri == existingUri && it.isWritePermission }
+        if (hasValidUri && existingUri != null) {
+            viewModel.deleteSelectedDirectly(existingUri)
+        } else {
+            // Cần xin quyền SAF
+            pendingSafAction = { uri -> viewModel.deleteSelectedDirectly(uri) }
+            Toast.makeText(
+                this,
+                "Chọn thư mục gốc của thẻ SD để cấp quyền xóa",
+                Toast.LENGTH_LONG
+            ).show()
+            safLauncher.launch(null)
+        }
     }
 
     // ── File actions ────────────────────────────────────────────
@@ -416,7 +486,13 @@ class MainActivity : AppCompatActivity() {
             viewModel.toggleSelection(item)
             return
         }
-        val options = arrayOf("Chọn", "Đổi tên", "Chia sẻ", "Thuộc tính", "Xóa vào thùng rác")
+        val onSd = viewModel.run {
+            val f = File(item.path)
+            val repo = com.filemanager.data.repository.FileRepository(this@MainActivity)
+            repo.isSdCardFile(f)
+        }
+        val deleteLabel = if (onSd) "⚠️ Xóa vĩnh viễn" else "Xóa vào thùng rác"
+        val options = arrayOf("Chọn", "Đổi tên", "Chia sẻ", "Thuộc tính", deleteLabel)
         AlertDialog.Builder(this)
             .setTitle(item.name)
             .setItems(options) { _, which ->
@@ -426,15 +502,30 @@ class MainActivity : AppCompatActivity() {
                     2 -> FileUtils.shareFiles(this, listOf(item.file))
                     3 -> FilePropertiesDialog.newInstance(item)
                             .show(supportFragmentManager, "props")
-                    4 -> MaterialAlertDialogBuilder(this)
-                            .setTitle("Xóa vào thùng rác")
-                            .setMessage("Chuyển \"${item.name}\" vào thùng rác?")
-                            .setPositiveButton("Xóa") { _, _ ->
-                                viewModel.enterSelectionMode(item.path)
-                                viewModel.moveSelectedToTrash()
-                            }
-                            .setNegativeButton("Hủy", null)
-                            .show()
+                    4 -> {
+                        if (onSd) {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("⚠️ Xóa vĩnh viễn")
+                                .setMessage("Đây là file trên thẻ SD.\nXóa \"${item.name}\" vĩnh viễn?")
+                                .setPositiveButton("Xóa") { _, _ ->
+                                    viewModel.enterSelectionMode(item.path)
+                                    LoadingHelper.showOverlay(this, "Đang xóa...", item.name)
+                                    performSdCardDelete()
+                                }
+                                .setNegativeButton("Hủy", null)
+                                .show()
+                        } else {
+                            MaterialAlertDialogBuilder(this)
+                                .setTitle("Xóa vào thùng rác")
+                                .setMessage("Chuyển \"${item.name}\" vào thùng rác?")
+                                .setPositiveButton("Xóa") { _, _ ->
+                                    viewModel.enterSelectionMode(item.path)
+                                    viewModel.moveSelectedToTrash()
+                                }
+                                .setNegativeButton("Hủy", null)
+                                .show()
+                        }
+                    }
                 }
             }
             .show()
@@ -670,5 +761,9 @@ class MainActivity : AppCompatActivity() {
             }
             !viewModel.navigateUp() -> super.onBackPressed()
         }
+    }
+
+    companion object {
+        private const val PREF_SD_SAF_URI = "sd_saf_tree_uri"
     }
 }
