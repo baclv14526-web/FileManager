@@ -468,51 +468,85 @@ class MainActivity : AppCompatActivity() {
     // ── Dialogs ─────────────────────────────────────────────────
 
     private fun showNewFolderDialog() {
-        val et = EditText(this).apply {
-            hint = "Tên thư mục"
-            setPadding(48, 24, 48, 8)
-        }
-        MaterialAlertDialogBuilder(this)
+        val dialogBinding = com.filemanager.databinding.DialogInputNameBinding.inflate(layoutInflater)
+        dialogBinding.textInputLayout.hint = "Tên thư mục"
+        dialogBinding.textInputLayout.setStartIconDrawable(R.drawable.ic_folder)
+
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Tạo thư mục mới")
-            .setView(et)
-            .setPositiveButton("Tạo") { _, _ ->
-                val name = et.text.toString().trim()
-                if (name.isEmpty()) return@setPositiveButton
-                val cur = viewModel.currentPath.value ?: return@setPositiveButton
+            .setView(dialogBinding.root)
+            .setPositiveButton("Tạo", null) // Set null trước để tự xử lý validation không bị tắt dialog khi để trống
+            .setNegativeButton("Hủy", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialogBinding.editTextName.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.showSoftInput(dialogBinding.editTextName, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+
+            val positiveBtn = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            positiveBtn.setOnClickListener {
+                val name = dialogBinding.editTextName.text.toString().trim()
+                if (name.isEmpty()) {
+                    dialogBinding.textInputLayout.error = "Vui lòng nhập tên thư mục"
+                    return@setOnClickListener
+                }
+                val cur = viewModel.currentPath.value ?: return@setOnClickListener
                 if (File(cur, name).mkdirs()) {
                     viewModel.refresh()
                     Toast.makeText(this, "Đã tạo \"$name\"", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
                 } else {
-                    Toast.makeText(this, "Không thể tạo thư mục", Toast.LENGTH_SHORT).show()
+                    dialogBinding.textInputLayout.error = "Không thể tạo thư mục (trùng tên hoặc lỗi quyền)"
                 }
             }
-            .setNegativeButton("Hủy", null)
-            .show()
+        }
+        dialog.show()
     }
 
     private fun showRenameDialog(item: FileItem) {
-        val et = EditText(this).apply {
-            setText(item.name)
-            selectAll()
-            setPadding(48, 24, 48, 8)
-        }
-        MaterialAlertDialogBuilder(this)
+        val dialogBinding = com.filemanager.databinding.DialogInputNameBinding.inflate(layoutInflater)
+        dialogBinding.textInputLayout.hint = if (item.isDirectory) "Tên thư mục mới" else "Tên file mới"
+        dialogBinding.textInputLayout.setStartIconDrawable(
+            if (item.isDirectory) R.drawable.ic_folder else R.drawable.ic_file
+        )
+        dialogBinding.editTextName.setText(item.name)
+        dialogBinding.editTextName.selectAll()
+
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Đổi tên")
-            .setView(et)
-            .setPositiveButton("Đổi tên") { _, _ ->
-                val newName = et.text.toString().trim()
-                if (newName.isNotEmpty() && newName != item.name) {
-                    val dest = File(item.file.parent, newName)
-                    if (item.file.renameTo(dest)) {
-                        viewModel.refresh()
-                        Toast.makeText(this, "Đã đổi tên", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Không thể đổi tên", Toast.LENGTH_SHORT).show()
-                    }
+            .setView(dialogBinding.root)
+            .setPositiveButton("Đổi tên", null)
+            .setNegativeButton("Hủy", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialogBinding.editTextName.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.showSoftInput(dialogBinding.editTextName, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+
+            val positiveBtn = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+            positiveBtn.setOnClickListener {
+                val newName = dialogBinding.editTextName.text.toString().trim()
+                if (newName.isEmpty()) {
+                    dialogBinding.textInputLayout.error = "Tên không được để trống"
+                    return@setOnClickListener
+                }
+                if (newName == item.name) {
+                    dialog.dismiss()
+                    return@setOnClickListener
+                }
+                val dest = File(item.file.parent, newName)
+                if (item.file.renameTo(dest)) {
+                    viewModel.refresh()
+                    Toast.makeText(this, "Đã đổi tên", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                } else {
+                    dialogBinding.textInputLayout.error = "Không thể đổi tên (file đã tồn tại)"
                 }
             }
-            .setNegativeButton("Hủy", null)
-            .show()
+        }
+        dialog.show()
     }
 
     private fun showSortDialog(): Boolean {
