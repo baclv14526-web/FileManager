@@ -86,6 +86,11 @@ jobs:
           echo "=== RELEASE KOTLIN/AAPT ERRORS ==="
           grep -E "error:|warning:|\.kt:[0-9]|AAPT: error" release_build_log.txt | head -60 || true
 
+      - name: List built APKs
+        run: |
+          echo "=== BUILT APKS ==="
+          find app/build/outputs/apk/ -type f -name "*.apk" || true
+
       - name: Sign Release APK
         id: sign_apk
         if: env.HAS_KEY == 'true'
@@ -101,7 +106,7 @@ jobs:
           BUILD_TOOLS_VERSION: "34.0.0"
 
       - name: Upload Signed Release APK
-        if: env.HAS_KEY == 'true'
+        if: env.HAS_KEY == 'true' && steps.sign_apk.outputs.signedReleaseFile != ''
         uses: actions/upload-artifact@v4
         with:
           name: FileManager-release-signed-v${{ github.run_number }}
@@ -110,12 +115,12 @@ jobs:
         env:
           HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
-      - name: Upload Unsigned Release APK
+      - name: Upload Release APK
         if: env.HAS_KEY != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: FileManager-release-unsigned-v${{ github.run_number }}
-          path: app/build/outputs/apk/release/*.apk
+          name: FileManager-release-v${{ github.run_number }}
+          path: app/build/outputs/apk/**/*.apk
           retention-days: 90
         env:
           HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
@@ -127,7 +132,6 @@ jobs:
           name: "FileManager ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
