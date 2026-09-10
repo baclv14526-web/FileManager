@@ -7,9 +7,11 @@ import com.filemanager.R
 import com.filemanager.databinding.ItemSidebarBinding
 
 class SidebarAdapter(
-    private val items: List<Pair<String, String>>,
+    items: List<Pair<String, String>>,
     private val onClick: (String) -> Unit
 ) : RecyclerView.Adapter<SidebarAdapter.VH>() {
+
+    private val itemsList = items.toMutableList()
 
     private val icons = mapOf(
         "Internal Storage" to R.drawable.ic_storage,
@@ -20,6 +22,12 @@ class SidebarAdapter(
         "Movies" to R.drawable.ic_video,
         "Documents" to R.drawable.ic_document,
     )
+
+    fun submitList(newItems: List<Pair<String, String>>) {
+        itemsList.clear()
+        itemsList.addAll(newItems)
+        notifyDataSetChanged()
+    }
 
     inner class VH(private val binding: ItemSidebarBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: Pair<String, String>) {
@@ -32,6 +40,6 @@ class SidebarAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         VH(ItemSidebarBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
-    override fun onBindViewHolder(holder: VH, position: Int) = holder.bind(items[position])
-    override fun getItemCount() = items.size
+    override fun onBindViewHolder(holder: VH, position: Int) = holder.bind(itemsList[position])
+    override fun getItemCount() = itemsList.size
 }

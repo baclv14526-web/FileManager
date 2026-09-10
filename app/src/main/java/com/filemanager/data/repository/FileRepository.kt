@@ -262,7 +262,8 @@ class FileRepository(private val context: Context) {
     } catch (e: Exception) { "/sdcard" }
 
     fun getQuickAccessPaths(): List<Pair<String, String>> = try {
-        listOf(
+        val topVisited = com.filemanager.utils.FolderHistoryManager.getTopVisitedFolders(context, 3)
+        val defaultPaths = listOf(
             "Internal Storage" to (Environment.getExternalStorageDirectory()?.absolutePath ?: "/sdcard"),
             "Downloads"  to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)?.absolutePath ?: "/sdcard/Download"),
             "DCIM"       to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)?.absolutePath ?: "/sdcard/DCIM"),
@@ -271,6 +272,9 @@ class FileRepository(private val context: Context) {
             "Movies"     to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)?.absolutePath ?: "/sdcard/Movies"),
             "Documents"  to (Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)?.absolutePath ?: "/sdcard/Documents"),
         )
+        // Ghép top thư mục hay vào nhất (không trùng lặp path) với danh sách mặc định
+        val topPathsSet = topVisited.map { it.second }.toSet()
+        topVisited + defaultPaths.filterNot { it.second in topPathsSet }
     } catch (e: Exception) {
         listOf("Internal Storage" to "/sdcard")
     }

@@ -388,28 +388,6 @@
                 android:layout_marginStart="16dp"/>
         </LinearLayout>
 
-        <!-- Trash button -->
-        <LinearLayout
-            android:id="@+id/btnTrash"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="20dp"
-            android:background="?attr/selectableItemBackground">
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_delete"
-                android:tint="?attr/colorError"/>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Thùng rác"
-                android:textSize="15sp"
-                android:layout_marginStart="16dp"/>
-        </LinearLayout>
-
         <!-- Cleanup button -->
         <LinearLayout
             android:id="@+id/btnCleanup"
@@ -442,6 +420,28 @@
                     android:textSize="11sp"
                     android:textColor="?attr/colorOnSurfaceVariant"/>
             </LinearLayout>
+        </LinearLayout>
+
+        <!-- Trash button -->
+        <LinearLayout
+            android:id="@+id/btnTrash"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_delete"
+                android:tint="?attr/colorError"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Thùng rác"
+                android:textSize="15sp"
+                android:layout_marginStart="16dp"/>
         </LinearLayout>
 
         <View android:layout_width="match_parent" android:layout_height="1dp"

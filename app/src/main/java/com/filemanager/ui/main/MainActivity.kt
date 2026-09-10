@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
     private lateinit var fileAdapter: FileListAdapter
+    private lateinit var sidebarAdapter: SidebarAdapter
 
     // SharedPreferences lưu SAF tree URI đã được cấp quyền
     private lateinit var prefs: SharedPreferences
@@ -220,24 +221,33 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupSidebar() {
         val quickAccess = viewModel.getQuickAccessPaths()
-        val sidebarAdapter = SidebarAdapter(quickAccess) { path ->
+        sidebarAdapter = SidebarAdapter(quickAccess) { path ->
             binding.drawerLayout.closeDrawers()
             viewModel.navigateTo(path)
             binding.searchEditText.text?.clear()
         }
         binding.sidebarRecycler.adapter = sidebarAdapter
 
+        binding.drawerLayout.addDrawerListener(object : androidx.drawerlayout.widget.DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                if (drawerView == binding.navDrawer) {
+                    sidebarAdapter.submitList(viewModel.getQuickAccessPaths())
+                    updateStorageInfo()
+                }
+            }
+        })
+
         binding.btnTimeline.setOnClickListener {
             binding.drawerLayout.closeDrawers()
             startActivity(Intent(this, TimelineActivity::class.java))
         }
-        binding.btnTrash.setOnClickListener {
-            binding.drawerLayout.closeDrawers()
-            startActivity(Intent(this, TrashActivity::class.java))
-        }
         binding.btnCleanup.setOnClickListener {
             binding.drawerLayout.closeDrawers()
             startActivity(Intent(this, com.filemanager.ui.cleanup.CleanupActivity::class.java))
+        }
+        binding.btnTrash.setOnClickListener {
+            binding.drawerLayout.closeDrawers()
+            startActivity(Intent(this, TrashActivity::class.java))
         }
         binding.btnMenuToggle.setOnClickListener {
             binding.drawerLayout.openDrawer(binding.navDrawer)

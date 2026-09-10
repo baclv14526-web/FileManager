@@ -102,6 +102,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (!current.isNullOrEmpty() && current != path) pathHistory.addLast(current)
             _currentPath.value = path
             exitSelectionMode()
+            com.filemanager.utils.FolderHistoryManager.recordFolderVisit(getApplication(), path)
             loadFiles(path)
         } catch (e: Exception) {
             _toastMessage.value = "Không thể mở: ${e.message}"
