@@ -46,84 +46,39 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle-
 
-      # Build Debug — in đầy đủ lỗi Kotlin nếu fail
+      # Build Debug APK
       - name: Build Debug APK
         run: |
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            -Pkotlin.incremental=false \
-            2>&1 | tee build_log.txt
-          # Grep chỉ phần lỗi Kotlin để dễ đọc
-          echo "=== KOTLIN ERRORS ==="
-          grep -E "error:|warning:|\.kt:[0-9]" build_log.txt | head -60 || true
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: FileManager-debug-v${{ github.run_number }}
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
           retention-days: 30
 
-      # Upload build log khi fail để debug
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-v${{ github.run_number }}
-          path: build_log.txt
-          retention-days: 7
-
+      # Build Release APK
       - name: Build Release APK
         run: |
-          ./gradlew assembleRelease \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            -Pkotlin.incremental=false \
-            2>&1 | tee release_build_log.txt
-          echo "=== RELEASE KOTLIN/AAPT ERRORS ==="
-          grep -E "error:|warning:|\.kt:[0-9]|AAPT: error" release_build_log.txt | head -60 || true
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: List built APKs
+      - name: List All Built APKs
         run: |
-          echo "=== BUILT APKS ==="
-          find app/build/outputs/apk/ -type f -name "*.apk" || true
-
-      - name: Sign Release APK
-        id: sign_apk
-        if: env.HAS_KEY == 'true'
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
-          BUILD_TOOLS_VERSION: "34.0.0"
-
-      - name: Upload Signed Release APK
-        if: env.HAS_KEY == 'true' && steps.sign_apk.outputs.signedReleaseFile != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: FileManager-release-signed-v${{ github.run_number }}
-          path: ${{ steps.sign_apk.outputs.signedReleaseFile }}
-          retention-days: 90
-        env:
-          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
+          echo "=== ALL GENERATED APKS ==="
+          ls -la app/build/outputs/apk/debug/ || true
+          ls -la app/build/outputs/apk/release/ || true
 
       - name: Upload Release APK
-        if: env.HAS_KEY != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: FileManager-release-v${{ github.run_number }}
-          path: app/build/outputs/apk/**/*.apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
           retention-days: 90
-        env:
-          HAS_KEY: ${{ secrets.SIGNING_KEY != '' }}
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -132,6 +87,7 @@ jobs:
           name: "FileManager ${{ github.ref_name }}"
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/**/*.apk
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
