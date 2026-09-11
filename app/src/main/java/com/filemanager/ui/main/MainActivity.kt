@@ -77,10 +77,12 @@ class MainActivity : AppCompatActivity() {
     ) { uri ->
         if (uri != null) {
             // Lưu quyền tồn tại qua reboot
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             // Kiểm tra user có chọn đúng ROOT thẻ SD không
             // lastPathSegment dạng "volumeId:subpath" — subpath rỗng = đã chọn root
             val segment = uri.lastPathSegment ?: ""
@@ -89,7 +91,7 @@ class MainActivity : AppCompatActivity() {
                 // User chọn thư mục con — cảnh báo nhưng vẫn dùng (sẽ giới hạn phạm vi)
                 Toast.makeText(
                     this,
-                    "⚠️ Bạn chọn thư mục con, không phải root thẻ SD.\nChỉ xóa được file trong thư mục đó.",
+                    "⚠️ Bạn chọn thư mục con, không phải root thẻ SD.\nChỉ thao tác được file trong thư mục đó.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -98,9 +100,51 @@ class MainActivity : AppCompatActivity() {
             // Thực hiện hành động đợi SAF đã chờ
             pendingSafAction?.invoke(uri)
         } else {
-            Toast.makeText(this, "Cần cấp quyền thẻ SD để xóa", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Cần cấp quyền thẻ SD để tiếp tục", Toast.LENGTH_LONG).show()
+            LoadingHelper.hideOverlay(this)
         }
         pendingSafAction = null
+    }
+
+    private val safIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == RESULT_OK && uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            val segment = uri.lastPathSegment ?: ""
+            val subPath = if (segment.contains(':')) segment.substringAfter(':') else segment
+            if (subPath.isNotEmpty()) {
+                Toast.makeText(
+                    this,
+                    "⚠️ Bạn chọn thư mục con, không phải root thẻ SD.\nChỉ thao tác được file trong thư mục đó.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            sdSafUri = uri
+            prefs.edit().putString(PREF_SD_SAF_URI, uri.toString()).apply()
+            pendingSafAction?.invoke(uri)
+        } else {
+            Toast.makeText(this, "Cần cấp quyền thẻ SD để tiếp tục", Toast.LENGTH_LONG).show()
+            LoadingHelper.hideOverlay(this)
+        }
+        pendingSafAction = null
+    }
+
+    private fun requestSdCardSafPermission() {
+        val pickerIntent = com.filemanager.utils.SdCardResolver.buildSdCardPickerIntent(this)
+        if (pickerIntent != null) {
+            try {
+                safIntentLauncher.launch(pickerIntent)
+                return
+            } catch (_: Exception) {}
+        }
+        safLauncher.launch(null)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -479,16 +523,10 @@ class MainActivity : AppCompatActivity() {
         // Kiểm tra URI đã lưu có còn quyền ghi không
         val hasWritePermission = existingUri != null && contentResolver.persistedUriPermissions
             .any { it.uri == existingUri && it.isWritePermission }
-        // Kiểm tra thêm: URI phải có thể tìm thấy ít nhất 1 file của items cần xóa
-        // (đảm bảo URI trỏ đúng volume, không phải volume cũ)
+        // Kiểm tra thêm: URI phải bao phủ các file cần xóa (đúng volume qua SdCardResolver)
         val uriCoversFiles = hasWritePermission && existingUri != null &&
             viewModel.getSelectedItems().any { item ->
-                // SAF URI lastPathSegment dạng "volumeId:subpath"
-                // File path dạng "/storage/volumeId/..."
-                val segment = existingUri.lastPathSegment ?: ""
-                val volumeId = segment.substringBefore(':')
-                item.path.contains("/storage/$volumeId/") ||
-                item.path.contains("/$volumeId/")
+                com.filemanager.utils.SdCardResolver.uriMatchesFile(existingUri, item.file, this)
             }
 
         if (uriCoversFiles && existingUri != null) {
@@ -511,7 +549,7 @@ class MainActivity : AppCompatActivity() {
                     "4. Nhấn 'Cho phép' / 'Use this folder'"
                 )
                 .setPositiveButton("OK, mở trình chọn") { _, _ ->
-                    safLauncher.launch(null)
+                    requestSdCardSafPermission()
                 }
                 .setNegativeButton("Hủy") { _, _ ->
                     pendingSafAction = null
@@ -706,7 +744,8 @@ class MainActivity : AppCompatActivity() {
                     // Thẻ SD: cần SAF URI
                     val existingUri = sdSafUri
                     val hasValidUri = existingUri != null && contentResolver.persistedUriPermissions
-                        .any { it.uri == existingUri && it.isWritePermission }
+                        .any { it.uri == existingUri && it.isWritePermission } &&
+                        com.filemanager.utils.SdCardResolver.uriMatchesFile(existingUri, item.file, this)
 
                     if (hasValidUri && existingUri != null) {
                         // Có quyền rồi → đổi tên luôn
@@ -715,12 +754,19 @@ class MainActivity : AppCompatActivity() {
                         // Chưa có quyền → xin SAF rồi đổi tên
                         pendingSafAction = { uri -> doRenameWithSaf(item, newName, uri, dialog) }
                         dialog.dismiss()
-                        Toast.makeText(
-                            this,
-                            "Chọn thư mục gốc của thẻ SD để cấp quyền đổi tên",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        safLauncher.launch(null)
+                        MaterialAlertDialogBuilder(this)
+                            .setTitle("📂 Cấp quyền thẻ SD")
+                            .setMessage(
+                                "Để đổi tên file trên thẻ SD, Android yêu cầu cấp quyền:\n\n" +
+                                "1. Nhấn OK để mở trình chọn thư mục\n" +
+                                "2. Chọn thư mục GỐC của thẻ SD\n" +
+                                "3. Nhấn 'Cho phép' / 'Use this folder'"
+                            )
+                            .setPositiveButton("OK, mở trình chọn") { _, _ ->
+                                requestSdCardSafPermission()
+                            }
+                            .setNegativeButton("Hủy", null)
+                            .show()
                     }
                 } else {
                     // Bộ nhớ trong: renameTo thông thường

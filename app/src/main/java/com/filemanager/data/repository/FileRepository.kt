@@ -171,6 +171,11 @@ class FileRepository(private val context: Context) {
         } catch (e: Exception) { false }
     }
 
+    /** Kiểm tra file có nằm trên thẻ SD (removable storage) không */
+    fun isSdCardFile(file: File): Boolean {
+        return com.filemanager.utils.SdCardResolver.isSdCardPath(context, file.absolutePath)
+    }
+
     /**
      * Xóa thẳng file/folder mà không vào thùng rác, dùng SAF DocumentFile cho thẻ SD.
      * @param files  Danh sách file cần xóa
@@ -188,9 +193,7 @@ class FileRepository(private val context: Context) {
 
                 if (sdTreeUri != null && isSdCardFile(src)) {
                     // Xóa qua SAF DocumentFile (thẻ SD cần quyền đặc biệt)
-                    val rootDoc = DocumentFile.fromTreeUri(context, sdTreeUri)
-                        ?: return@all false
-                    val docFile = rootDoc.findFileByPath(src)
+                    val docFile = com.filemanager.utils.SdCardResolver.resolveDocumentFile(context, src, sdTreeUri)
                         ?: return@all false
                     // ✅ Phải capture return value — delete() trả về false nếu thất bại
                     docFile.delete()
@@ -200,14 +203,6 @@ class FileRepository(private val context: Context) {
                 }
             } catch (e: Exception) { false }
         }
-    }
-
-    /** Kiểm tra file có nằm trên thẻ SD (removable storage) không */
-    fun isSdCardFile(file: File): Boolean {
-        val internalRoot = try {
-            Environment.getExternalStorageDirectory().absolutePath
-        } catch (e: Exception) { "/storage/emulated/0" }
-        return !file.absolutePath.startsWith(internalRoot)
     }
 
     /**
@@ -227,8 +222,8 @@ class FileRepository(private val context: Context) {
         try {
             if (sdTreeUri != null && isSdCardFile(file)) {
                 // Đổi tên qua SAF (thẻ SD)
-                val docFile = DocumentFile.fromTreeUri(context, sdTreeUri)
-                    ?.findFileByPath(file) ?: return@withContext null
+                val docFile = com.filemanager.utils.SdCardResolver.resolveDocumentFile(context, file, sdTreeUri)
+                    ?: return@withContext null
                 if (docFile.renameTo(newName)) {
                     File(file.parent, newName)
                 } else null
@@ -285,70 +280,4 @@ class FileRepository(private val context: Context) {
 
 enum class TimelineMediaType { IMAGES, VIDEOS, ALL }
 
-/**
- * Tìm DocumentFile tương ứng với java.io.File trong cây thư mục SAF.
- *
- * Nguyên lý:
- *  - SAF tree URI lastPathSegment có dạng "volumeId:relativePathFromVolumeRoot"
- *    VD: "1234-ABCD:"        → user chọn root thẻ SD
- *        "1234-ABCD:DCIM"    → user chọn thư mục DCIM
- *  - File path có dạng "/storage/1234-ABCD/DCIM/photo.jpg"
- *  - Ta cần tính relative path từ SAF tree root (không phải từ volume root)
- *    để navigate đúng tới file cần xóa/đổi tên.
- */
-private fun DocumentFile.findFileByPath(target: File): DocumentFile? {
-    val treePath = this.uri.lastPathSegment ?: return null
 
-    // treeRelativePath = phần path trong volume mà user đã chọn làm tree root
-    // ""       = user chọn root của thẻ SD (phổ biến nhất, đúng nhất)
-    // "DCIM"   = user chọn thư mục DCIM (chỉ có thể xóa file trong DCIM)
-    val volumeSeparator = treePath.indexOf(':')
-    val treeRelativePath = if (volumeSeparator >= 0) treePath.substring(volumeSeparator + 1) else ""
-
-    val targetPath = target.absolutePath
-
-    // Tính fullRelativePath = path tương đối so với ROOT của volume
-    // VD: /storage/1234-ABCD/DCIM/photo.jpg → "DCIM/photo.jpg"
-    val fullRelativePath: String = run {
-        val storagePrefix = "/storage/"
-        val storageIndex = targetPath.indexOf(storagePrefix)
-        if (storageIndex >= 0) {
-            val afterStorage = targetPath.substring(storageIndex + storagePrefix.length)
-            val slashAfterVolume = afterStorage.indexOf('/')
-            if (slashAfterVolume >= 0) afterStorage.substring(slashAfterVolume + 1) else ""
-        } else {
-            // Fallback: một số thiết bị mount SD ở /mnt/... hoặc /storage/extsdcard/...
-            val altPrefixes = listOf("/mnt/extsdcard/", "/mnt/sdcard1/",
-                                     "/storage/extsdcard/", "/storage/sdcard1/")
-            val matched = altPrefixes.firstOrNull { targetPath.startsWith(it) }
-                ?: return null  // không nhận dạng được volume → không xử lý được
-            targetPath.substring(matched.length)
-        }
-    }
-
-    // Tính relativeFromTree = path tương đối so với CÂY mà user đã cấp quyền
-    // Ví dụ:
-    //   treeRelativePath = ""       + fullRelativePath = "DCIM/photo.jpg" → "DCIM/photo.jpg"
-    //   treeRelativePath = "DCIM"   + fullRelativePath = "DCIM/photo.jpg" → "photo.jpg"
-    //   treeRelativePath = "DCIM"   + fullRelativePath = "Downloads/f.txt" → null (ngoài tree)
-    val relativeFromTree: String = when {
-        treeRelativePath.isEmpty() ->
-            fullRelativePath                          // tree root = volume root
-        fullRelativePath == treeRelativePath ->
-            ""                                        // target chính là tree root
-        fullRelativePath.startsWith("$treeRelativePath/") ->
-            fullRelativePath.substring(treeRelativePath.length + 1)  // trong subtree
-        else ->
-            return null   // ❌ file nằm ngoài phạm vi cấp quyền của tree
-    }
-
-    if (relativeFromTree.isEmpty()) return this
-
-    // Navigate từng cấp thư mục xuống tới file
-    var current: DocumentFile = this
-    for (segment in relativeFromTree.split('/')) {
-        if (segment.isEmpty()) continue
-        current = current.findFile(segment) ?: return null
-    }
-    return current
-}
