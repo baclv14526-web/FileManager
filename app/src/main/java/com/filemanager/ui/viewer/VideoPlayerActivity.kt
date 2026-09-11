@@ -58,7 +58,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     // Zoom
     private var isZoomed = false
     enum class ZoomMode(val label: String) {
-        FIT("FIT"), FULL("100%"), Z150("150%"), Z200("200%"), CROP("CROP");
+        FIT("FIT"), Z50("50%"), FULL("100%"), Z150("150%"), Z200("200%"), CROP("CROP");
         fun next() = entries[(ordinal + 1) % entries.size]
     }
     private var zoomMode = ZoomMode.FIT
@@ -380,6 +380,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         val pv = binding.playerView
         when (zoomMode) {
             ZoomMode.FIT  -> { pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT;          pv.scaleX = 1f; pv.scaleY = 1f }
+            ZoomMode.Z50  -> { pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT;          pv.scaleX = 0.5f; pv.scaleY = 0.5f }
             ZoomMode.FULL -> { pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM;         pv.scaleX = 1f; pv.scaleY = 1f }
             ZoomMode.Z150 -> { pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM;         pv.scaleX = 1.5f; pv.scaleY = 1.5f }
             ZoomMode.Z200 -> { pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM;         pv.scaleX = 2.0f; pv.scaleY = 2.0f }

@@ -7,7 +7,9 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import com.filemanager.R
 import com.filemanager.databinding.ActivityImageViewerBinding
 
 class ImageViewerActivity : AppCompatActivity() {
@@ -20,6 +22,7 @@ class ImageViewerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityImageViewerBinding
     private var paths: ArrayList<String> = arrayListOf()
     private var isUiVisible = true
+    private var currentZoomMode = ImageZoomMode.FIT
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,11 +44,39 @@ class ImageViewerActivity : AppCompatActivity() {
         binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 updateCounter(position)
+                currentZoomMode = ImageZoomMode.FIT
+                updateZoomUI()
             }
         })
 
+        binding.btnZoom.setOnClickListener {
+            currentZoomMode = currentZoomMode.next()
+            applyZoom()
+            updateZoomUI()
+        }
+
         binding.btnClose.setOnClickListener { finish() }
         updateCounter(startIndex)
+        updateZoomUI()
+    }
+
+    private fun getCurrentZoomableImageView(): ZoomableImageView? {
+        val currentPos = binding.viewPager.currentItem
+        val recyclerView = binding.viewPager.getChildAt(0) as? RecyclerView ?: return null
+        val holder = recyclerView.findViewHolderForAdapterPosition(currentPos) as? ImagePagerAdapter.VH
+        return holder?.imageView
+    }
+
+    private fun applyZoom() {
+        val iv = getCurrentZoomableImageView()
+        iv?.setZoomMode(currentZoomMode)
+    }
+
+    private fun updateZoomUI() {
+        binding.tvZoomLabel.text = currentZoomMode.label
+        binding.btnZoom.setImageResource(
+            if (currentZoomMode == ImageZoomMode.FIT) R.drawable.ic_zoom_in else R.drawable.ic_zoom_out
+        )
     }
 
     private fun updateCounter(position: Int) {

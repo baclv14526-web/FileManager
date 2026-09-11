@@ -47,6 +47,17 @@ class ImagePagerAdapter(
     override fun getItemCount() = paths.size
 }
 
+enum class ImageZoomMode(val label: String) {
+    FIT("FIT"),
+    Z50("50%"),
+    FULL("100%"),
+    Z150("150%"),
+    Z200("200%"),
+    CROP("CROP");
+
+    fun next() = entries[(ordinal + 1) % entries.size]
+}
+
 @SuppressLint("ClickableViewAccessibility")
 class ZoomableImageView(context: android.content.Context) : androidx.appcompat.widget.AppCompatImageView(context) {
 
@@ -57,12 +68,14 @@ class ZoomableImageView(context: android.content.Context) : androidx.appcompat.w
     private var lastY = 0f
     private var isDragging = false
     private var onSingleTap: (() -> Unit)? = null
+    var currentZoomMode: ImageZoomMode = ImageZoomMode.FIT
+        private set
 
     private val scaleDetector = ScaleGestureDetector(context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                scaleFactor *= detector.scaleFactor
-                scaleFactor = scaleFactor.coerceIn(1f, 8f)
+                val newScale = (scaleFactor * detector.scaleFactor).coerceIn(0.5f, 8f)
+                scaleFactor = newScale
                 applyTransform()
                 return true
             }
@@ -73,9 +86,44 @@ class ZoomableImageView(context: android.content.Context) : androidx.appcompat.w
     }
 
     fun resetZoom() {
+        currentZoomMode = ImageZoomMode.FIT
+        scaleType = ScaleType.FIT_CENTER
         scaleFactor = 1f
         translateX = 0f
         translateY = 0f
+        applyTransform()
+    }
+
+    fun setZoomMode(mode: ImageZoomMode) {
+        currentZoomMode = mode
+        translateX = 0f
+        translateY = 0f
+        when (mode) {
+            ImageZoomMode.FIT -> {
+                scaleType = ScaleType.FIT_CENTER
+                scaleFactor = 1f
+            }
+            ImageZoomMode.CROP -> {
+                scaleType = ScaleType.CENTER_CROP
+                scaleFactor = 1f
+            }
+            ImageZoomMode.Z50 -> {
+                scaleType = ScaleType.FIT_CENTER
+                scaleFactor = 0.5f
+            }
+            ImageZoomMode.FULL -> {
+                scaleType = ScaleType.FIT_CENTER
+                scaleFactor = 1f
+            }
+            ImageZoomMode.Z150 -> {
+                scaleType = ScaleType.FIT_CENTER
+                scaleFactor = 1.5f
+            }
+            ImageZoomMode.Z200 -> {
+                scaleType = ScaleType.FIT_CENTER
+                scaleFactor = 2f
+            }
+        }
         applyTransform()
     }
 
@@ -95,7 +143,7 @@ class ZoomableImageView(context: android.content.Context) : androidx.appcompat.w
                 isDragging = false
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!scaleDetector.isInProgress && scaleFactor > 1f) {
+                if (!scaleDetector.isInProgress && (scaleFactor > 1f || scaleFactor < 1f || currentZoomMode == ImageZoomMode.CROP)) {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
                     if (abs(dx) > 10 || abs(dy) > 10) isDragging = true
@@ -108,8 +156,12 @@ class ZoomableImageView(context: android.content.Context) : androidx.appcompat.w
             }
             MotionEvent.ACTION_UP -> {
                 if (!isDragging) onSingleTap?.invoke()
-                if (scaleFactor <= 1f) resetZoom()
-                parent?.requestDisallowInterceptTouchEvent(scaleFactor > 1f)
+                if (scaleFactor == 1f && currentZoomMode == ImageZoomMode.FIT) {
+                    translateX = 0f
+                    translateY = 0f
+                    applyTransform()
+                }
+                parent?.requestDisallowInterceptTouchEvent(scaleFactor > 1f || currentZoomMode == ImageZoomMode.CROP)
             }
         }
         return true
