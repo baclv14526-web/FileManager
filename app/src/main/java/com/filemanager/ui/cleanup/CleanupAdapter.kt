@@ -126,7 +126,10 @@ class CleanupAdapter(
 
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
-        if (holder is EntryVH) Glide.with(holder.itemView).clear(holder.binding.ivIcon)
+        if (holder is EntryVH) {
+            Glide.with(holder.itemView).clear(holder.binding.ivThumbnail)
+            Glide.with(holder.itemView).clear(holder.binding.ivIcon)
+        }
     }
 
     override fun onDetachedFromRecyclerView(rv: RecyclerView) {
@@ -222,12 +225,20 @@ class CleanupAdapter(
             binding.tvPath.text = item.fileItem.file.parent ?: ""
             binding.tvSize.text = if (item.fileItem.size > 0) FileUtils.formatSize(item.fileItem.size) else "0 B"
             when (item.fileItem.fileType) {
-                FileType.IMAGE -> Glide.with(binding.root).load(item.fileItem.file)
-                    .apply(GLIDE_OPTS).placeholder(R.drawable.ic_image).into(binding.ivIcon)
-                FileType.VIDEO -> Glide.with(binding.root).load(item.fileItem.file)
-                    .apply(GLIDE_OPTS).placeholder(R.drawable.ic_video).into(binding.ivIcon)
+                FileType.IMAGE, FileType.VIDEO -> {
+                    binding.ivThumbnail.visibility = View.VISIBLE
+                    binding.ivIcon.visibility      = View.GONE
+                    Glide.with(binding.root)
+                        .load(item.fileItem.file)
+                        .apply(GLIDE_OPTS)
+                        .placeholder(iconRes(item.fileItem.fileType, item.fileItem.isDirectory))
+                        .into(binding.ivThumbnail)
+                }
                 else -> {
-                    Glide.with(binding.root).clear(binding.ivIcon)
+                    Glide.with(binding.root).clear(binding.ivThumbnail)
+                    binding.ivThumbnail.setImageDrawable(null)
+                    binding.ivThumbnail.visibility = View.GONE
+                    binding.ivIcon.visibility      = View.VISIBLE
                     binding.ivIcon.setImageResource(iconRes(item.fileItem.fileType, item.fileItem.isDirectory))
                 }
             }
