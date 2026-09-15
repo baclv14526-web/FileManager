@@ -349,6 +349,12 @@ class MainActivity : AppCompatActivity() {
         viewModel.searchDisplayItems.observe(this) { displayItems ->
             val isLoading = viewModel.isLoading.value == true
             if (displayItems != null) {
+                // Khi có kết quả tìm kiếm có header nhóm → bắt buộc dùng LinearLayoutManager
+                // để tránh header đè lên danh sách file bên dưới (kể cả khi đang ở chế độ grid)
+                val hasHeaders = displayItems.any { it is FileDisplayItem.Header }
+                if (hasHeaders && binding.recyclerView.layoutManager !is LinearLayoutManager) {
+                    binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                }
                 fileAdapter.submitDisplayList(displayItems) {
                     val rawFiles = viewModel.searchResults.value ?: emptyList()
                     binding.fastScroller.setItems(rawFiles)
@@ -361,6 +367,17 @@ class MainActivity : AppCompatActivity() {
                 val currentFiles = viewModel.files.value ?: emptyList()
                 val query = binding.searchEditText.text?.toString() ?: ""
                 if (query.isEmpty()) {
+                    // Khôi phục layout manager phù hợp khi thoát tìm kiếm
+                    val isGrid = viewModel.isGridView.value == true
+                    binding.recyclerView.layoutManager =
+                        if (isGrid) {
+                            GridLayoutManager(this, 3).apply {
+                                spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                                    override fun getSpanSize(position: Int) =
+                                        if (fileAdapter.isHeader(position)) 3 else 1
+                                }
+                            }
+                        } else LinearLayoutManager(this)
                     fileAdapter.submitList(currentFiles) {
                         binding.fastScroller.setItems(currentFiles)
                     }
@@ -437,18 +454,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.isGridView.observe(this) { isGrid ->
-            binding.recyclerView.layoutManager =
-                if (isGrid) {
-                    GridLayoutManager(this, 3).apply {
-                        spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-                            override fun getSpanSize(position: Int): Int {
-                                return if (fileAdapter.isHeader(position)) 3 else 1
+            // Không thay đổi layout khi đang ở search mode (có header nhóm → giữ LinearLayoutManager)
+            val isSearchMode = viewModel.searchDisplayItems.value?.any { it is FileDisplayItem.Header } == true
+            if (!isSearchMode) {
+                binding.recyclerView.layoutManager =
+                    if (isGrid) {
+                        GridLayoutManager(this, 3).apply {
+                            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                                override fun getSpanSize(position: Int): Int {
+                                    return if (fileAdapter.isHeader(position)) 3 else 1
+                                }
                             }
                         }
+                    } else {
+                        LinearLayoutManager(this)
                     }
-                } else {
-                    LinearLayoutManager(this)
-                }
+            }
             fileAdapter.setViewType(isGrid)
             invalidateOptionsMenu()
         }
