@@ -170,13 +170,20 @@ class MainActivity : AppCompatActivity() {
             onItemClick = ::onFileItemClick,
             onItemLongClick = ::onFileItemLongClick,
             onSelectionChange = ::onSelectionChange,
-            onHeaderToggle = { type -> viewModel.toggleSearchGroup(type) }
+            onHeaderToggle = { type ->
+                // Phân biệt: đang search hay browse group mode
+                if (viewModel.searchDisplayItems.value != null) {
+                    viewModel.toggleSearchGroup(type)
+                } else {
+                    viewModel.toggleBrowseGroup(type)
+                }
+            }
         )
         binding.recyclerView.apply {
             adapter = fileAdapter
             layoutManager = LinearLayoutManager(this@MainActivity)
             // ✅ Tối ưu RecyclerView cho list lớn
-            setHasFixedSize(true)
+            setHasFixedSize(false)   // false vì header có thể wrap_content
             setItemViewCacheSize(20)
             recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_LIST, 20)
             recycledViewPool.setMaxRecycledViews(FileListAdapter.VIEW_GRID, 20)
@@ -335,7 +342,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupObservers() {
         viewModel.files.observe(this) { files ->
             val query = binding.searchEditText.text?.toString() ?: ""
-            if (query.isEmpty()) {
+            // Không override list nếu đang search hoặc đang group mode (browse display sẽ tự cập nhật)
+            val isGroupMode = viewModel.isGroupByType.value == true
+            if (query.isEmpty() && !isGroupMode) {
                 // ✅ callback sau khi AsyncListDiffer diff xong → cập nhật FastScroller
                 fileAdapter.submitList(files) {
                     binding.fastScroller.setItems(files)
@@ -367,25 +376,72 @@ class MainActivity : AppCompatActivity() {
                 val currentFiles = viewModel.files.value ?: emptyList()
                 val query = binding.searchEditText.text?.toString() ?: ""
                 if (query.isEmpty()) {
-                    // Khôi phục layout manager phù hợp khi thoát tìm kiếm
-                    val isGrid = viewModel.isGridView.value == true
-                    binding.recyclerView.layoutManager =
-                        if (isGrid) {
-                            GridLayoutManager(this, 3).apply {
-                                spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-                                    override fun getSpanSize(position: Int) =
-                                        if (fileAdapter.isHeader(position)) 3 else 1
+                    // Nếu đang ở group mode → để browseDisplayItems observer tự xử lý
+                    val isGroupMode = viewModel.isGroupByType.value == true
+                    if (!isGroupMode) {
+                        // Khôi phục layout manager phù hợp khi thoát tìm kiếm
+                        val isGrid = viewModel.isGridView.value == true
+                        binding.recyclerView.layoutManager =
+                            if (isGrid) {
+                                GridLayoutManager(this, 3).apply {
+                                    spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                                        override fun getSpanSize(position: Int) =
+                                            if (fileAdapter.isHeader(position)) 3 else 1
+                                    }
                                 }
-                            }
-                        } else LinearLayoutManager(this)
-                    fileAdapter.submitList(currentFiles) {
-                        binding.fastScroller.setItems(currentFiles)
+                            } else LinearLayoutManager(this)
+                        fileAdapter.submitList(currentFiles) {
+                            binding.fastScroller.setItems(currentFiles)
+                        }
+                        binding.emptyView.visibility =
+                            if (currentFiles.isEmpty() && !isLoading) View.VISIBLE else View.GONE
+                        binding.emptyText.text =
+                            if (currentFiles.isEmpty() && !isLoading) "Thư mục trống" else ""
                     }
-                    binding.emptyView.visibility =
-                        if (currentFiles.isEmpty() && !isLoading) View.VISIBLE else View.GONE
-                    binding.emptyText.text =
-                        if (currentFiles.isEmpty() && !isLoading) "Thư mục trống" else ""
                 }
+            }
+        }
+
+        // Observer: Browse group mode
+        viewModel.browseDisplayItems.observe(this) { displayItems ->
+            // Chỉ áp dụng khi không có search active
+            val query = binding.searchEditText.text?.toString() ?: ""
+            if (query.isNotEmpty()) return@observe
+
+            val isLoading = viewModel.isLoading.value == true
+            if (displayItems != null) {
+                // Đang group mode → bắt buộc dùng LinearLayoutManager (có header)
+                if (binding.recyclerView.layoutManager !is LinearLayoutManager) {
+                    binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                }
+                fileAdapter.submitDisplayList(displayItems) {
+                    val rawFiles = viewModel.files.value ?: emptyList()
+                    binding.fastScroller.setItems(rawFiles)
+                }
+                binding.emptyView.visibility =
+                    if (displayItems.isEmpty() && !isLoading) View.VISIBLE else View.GONE
+                binding.emptyText.text =
+                    if (displayItems.isEmpty() && !isLoading) "Thư mục trống" else ""
+            } else {
+                // Tắt group mode → restore flat list
+                val files = viewModel.files.value ?: emptyList()
+                val isGrid = viewModel.isGridView.value == true
+                binding.recyclerView.layoutManager =
+                    if (isGrid) {
+                        GridLayoutManager(this, 3).apply {
+                            spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                                override fun getSpanSize(position: Int) =
+                                    if (fileAdapter.isHeader(position)) 3 else 1
+                            }
+                        }
+                    } else LinearLayoutManager(this)
+                fileAdapter.submitList(files) {
+                    binding.fastScroller.setItems(files)
+                }
+                binding.emptyView.visibility =
+                    if (files.isEmpty() && !isLoading) View.VISIBLE else View.GONE
+                binding.emptyText.text =
+                    if (files.isEmpty() && !isLoading) "Thư mục trống" else ""
             }
         }
 
@@ -912,18 +968,26 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         val sel = viewModel.isSelectionMode.value == true
-        menu.findItem(R.id.action_sort)?.isVisible        = !sel
-        menu.findItem(R.id.action_toggle_view)?.isVisible = !sel
+        val isSearchActive = !binding.searchEditText.text.isNullOrEmpty()
+        menu.findItem(R.id.action_sort)?.isVisible           = !sel
+        menu.findItem(R.id.action_toggle_view)?.isVisible    = !sel
+        menu.findItem(R.id.action_group_by_type)?.isVisible  = !sel && !isSearchActive
         menu.findItem(R.id.action_toggle_view)?.setIcon(
             if (viewModel.isGridView.value == true) R.drawable.ic_list else R.drawable.ic_grid
+        )
+        // Icon group: dùng ic_folder khi OFF, ic_category (hoặc ic_folder tô màu) khi ON
+        val isGroupOn = viewModel.isGroupByType.value == true
+        menu.findItem(R.id.action_group_by_type)?.setIcon(
+            if (isGroupOn) R.drawable.ic_timeline else R.drawable.ic_folder
         )
         return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_sort        -> showSortDialog()
-            R.id.action_toggle_view -> { viewModel.toggleGridView(); true }
+            R.id.action_sort           -> showSortDialog()
+            R.id.action_toggle_view    -> { viewModel.toggleGridView(); true }
+            R.id.action_group_by_type  -> { viewModel.toggleGroupByType(); invalidateOptionsMenu(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }

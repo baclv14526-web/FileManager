@@ -7,6 +7,11 @@
         android:title="Toggle View"
         app:showAsAction="always"/>
     <item
+        android:id="@+id/action_group_by_type"
+        android:icon="@drawable/ic_folder"
+        android:title="Gom nhóm theo loại"
+        app:showAsAction="always"/>
+    <item
         android:id="@+id/action_sort"
         android:icon="@drawable/ic_sort"
         android:title="Sắp xếp"

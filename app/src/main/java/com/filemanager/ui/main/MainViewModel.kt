@@ -54,6 +54,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val searchExpandedState = mutableMapOf<FileType, Boolean>()
     private var rawSearchResults = listOf<FileItem>()
 
+    // ── Group-by-type cho Browse mode ───────────────────────────
+    private val _isGroupByType   = MutableLiveData(false)
+    val isGroupByType: LiveData<Boolean> = _isGroupByType
+
+    /** null = không group; non-null = danh sách grouped có Header + Item */
+    private val _browseDisplayItems = MutableLiveData<List<FileDisplayItem>?>(null)
+    val browseDisplayItems: LiveData<List<FileDisplayItem>?> = _browseDisplayItems
+
+    /** Trạng thái thu gọn/mở rộng từng nhóm trong browse mode */
+    private val browseExpandedState = mutableMapOf<FileType, Boolean>()
+
     private val _selectedFiles   = MutableLiveData<Set<String>>(emptySet())
     val selectedFiles: LiveData<Set<String>> = _selectedFiles
 
@@ -102,6 +113,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (!current.isNullOrEmpty() && current != path) pathHistory.addLast(current)
             _currentPath.value = path
             exitSelectionMode()
+            browseExpandedState.clear()  // Reset trạng thái mở/đóng nhóm khi vào thư mục mới
             com.filemanager.utils.FolderHistoryManager.recordFolderVisit(getApplication(), path)
             loadFiles(path)
         } catch (e: Exception) {
@@ -127,8 +139,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     repository.getFiles(path, _sortType.value ?: SortType.NAME_ASC)
                 }
                 _files.value = result
+                // Rebuild grouped view nếu đang bật
+                if (_isGroupByType.value == true) rebuildBrowseDisplayItems(result)
+                else _browseDisplayItems.value = null
             } catch (e: Exception) {
                 _files.value = emptyList()
+                _browseDisplayItems.value = null
                 _toastMessage.value = "Lỗi đọc thư mục: ${e.message}"
             } finally {
                 _isLoading.value = false
@@ -262,6 +278,61 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleGridView() { _isGridView.value = !(_isGridView.value ?: false) }
 
+    // ── Group-by-type: Browse mode ───────────────────────────────
+
+    fun toggleGroupByType() {
+        val current = _isGroupByType.value ?: false
+        _isGroupByType.value = !current
+        val files = _files.value ?: emptyList()
+        if (!current) {
+            // Vừa bật → rebuild ngay
+            rebuildBrowseDisplayItems(files)
+        } else {
+            // Vừa tắt → clear
+            browseExpandedState.clear()
+            _browseDisplayItems.value = null
+        }
+    }
+
+    /** Toggle thu gọn/mở rộng một nhóm cụ thể trong browse mode */
+    fun toggleBrowseGroup(type: FileType) {
+        browseExpandedState[type] = !(browseExpandedState[type] ?: true)
+        rebuildBrowseDisplayItems(_files.value ?: emptyList())
+    }
+
+    private fun rebuildBrowseDisplayItems(files: List<FileItem>) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val displayList = mutableListOf<FileDisplayItem>()
+
+            // Thứ tự nhóm: Folder → Image → Video → Audio → Document → Archive → APK → Code → Other
+            val ordered = listOf(
+                FileType.FOLDER, FileType.IMAGE, FileType.VIDEO, FileType.AUDIO,
+                FileType.DOCUMENT, FileType.ARCHIVE, FileType.APK, FileType.CODE, FileType.OTHER
+            )
+            val grouped = files.groupBy { it.fileType }
+
+            for (type in ordered) {
+                val items = grouped[type] ?: continue
+                val title = when (type) {
+                    FileType.FOLDER   -> "📁 Thư mục"
+                    FileType.IMAGE    -> "🖼️ Hình ảnh"
+                    FileType.VIDEO    -> "🎬 Video"
+                    FileType.AUDIO    -> "🎵 Âm thanh"
+                    FileType.DOCUMENT -> "📄 Tài liệu"
+                    FileType.ARCHIVE  -> "📦 File nén"
+                    FileType.CODE     -> "💻 Mã nguồn"
+                    FileType.APK      -> "🤖 Ứng dụng (APK)"
+                    FileType.OTHER    -> "📎 Khác"
+                }
+                val isExpanded = browseExpandedState[type] ?: true
+                displayList.add(FileDisplayItem.Header(type, title, items.size, isExpanded))
+                if (isExpanded) items.forEach { displayList.add(FileDisplayItem.Item(it)) }
+            }
+
+            _browseDisplayItems.postValue(displayList)
+        }
+    }
+
     // ── Selection ───────────────────────────────────────────────
 
     fun enterSelectionMode(path: String) {
@@ -305,6 +376,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             viewModelScope.launch(Dispatchers.Default) {
                 val updated = current.map { it.copy(isSelected = it.path in selected) }
                 _files.postValue(updated)
+                // Cập nhật browse display nếu đang group mode
+                if (_isGroupByType.value == true) rebuildBrowseDisplayItems(updated)
             }
         }
     }
